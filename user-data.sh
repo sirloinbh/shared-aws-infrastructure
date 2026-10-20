@@ -55,6 +55,9 @@ chmod 755 /usr/local/bin/workout-backup
 touch /var/log/workout-backup.log
 chown ubuntu:ubuntu /var/log/workout-backup.log
 echo '30 3 * * * ubuntu /usr/local/bin/workout-backup >> /var/log/workout-backup.log 2>&1' > /etc/cron.d/workout-backup
+
+# Pull-based deployment of CI-passed origin/main commits every 2 minutes (#75).
+bash "$APP/deploy/install-autodeploy.sh"
 INIT
 chmod 700 /usr/local/sbin/workout-init
 bash /usr/local/sbin/workout-init
