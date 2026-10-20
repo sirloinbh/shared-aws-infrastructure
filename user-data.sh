@@ -1,6 +1,11 @@
+#!/bin/sh
+# First-boot setup of the Lightsail server (#73). Rendered by Terraform templatefile.
+# Lightsail prepends its own commands and runs user_data with /bin/sh, so this wrapper
+# writes the bash script to a file and runs it with bash (pipefail needs bash).
+# Application deploys are done later by scripts/deploy.ps1.
+set -eu
+cat > /usr/local/sbin/workout-init <<'INIT'
 #!/bin/bash
-# First-boot setup of the Lightsail server (#73). Rendered by Terraform templatefile;
-# runs once as root. Application deploys are done later by scripts/deploy.ps1.
 set -euxo pipefail
 timedatectl set-timezone Asia/Seoul
 
@@ -50,3 +55,6 @@ chmod 755 /usr/local/bin/workout-backup
 touch /var/log/workout-backup.log
 chown ubuntu:ubuntu /var/log/workout-backup.log
 echo '30 3 * * * ubuntu /usr/local/bin/workout-backup >> /var/log/workout-backup.log 2>&1' > /etc/cron.d/workout-backup
+INIT
+chmod 700 /usr/local/sbin/workout-init
+bash /usr/local/sbin/workout-init
