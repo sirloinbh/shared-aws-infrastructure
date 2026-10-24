@@ -1,10 +1,25 @@
-name: Terraform validation
+# Checks formatting, configuration and shell syntax. Never runs terraform apply.
+# Versions follow sirloinbh/project-standards versions.json. The central sync replaces this file later.
+name: ci
+
 on: [push, pull_request]
+
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-      - run: terraform init -backend=false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: '1.16.5'
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false -input=false
       - run: terraform validate
+      - name: Shell syntax
+        run: |
+          status=0
+          while IFS= read -r -d '' script; do bash -n "$script" || status=1; done < <(find . -name '*.sh' -not -path './.terraform/*' -print0)
+          exit $status
