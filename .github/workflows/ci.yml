@@ -1,5 +1,5 @@
-# Checks formatting, configuration and shell syntax. Never runs terraform apply.
-# Versions follow sirloinbh/project-standards versions.json. The central sync replaces this file later.
+# 중앙 관리 파일. 수정은 sirloinbh/project-standards의 templates/infra/.github/workflows/에서
+# 중앙 공통 CI(reusable-infra-ci)를 동기화한 중앙 커밋으로 고정해 호출한다. terraform apply는 하지 않는다.
 name: ci
 
 on: [push, pull_request]
@@ -8,18 +8,8 @@ permissions:
   contents: read
 
 jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
-        with:
-          terraform_version: '1.16.5'
-      - run: terraform fmt -check -recursive
-      - run: terraform init -backend=false -input=false
-      - run: terraform validate
-      - name: Shell syntax
-        run: |
-          status=0
-          while IFS= read -r -d '' script; do bash -n "$script" || status=1; done < <(find . -name '*.sh' -not -path './.terraform/*' -print0)
-          exit $status
+  ci:
+    uses: sirloinbh/project-standards/.github/workflows/reusable-infra-ci.yml@978bfed0c73ea6b89de35f5c507b296835a8e381
+    with:
+      terraform-version: '1.16.5'
+      node-version: '24.21.0'
