@@ -12,13 +12,15 @@
 | 고정 IP | 인스턴스에 연결된 동안 | $0 |
 | 자동 스냅샷 | 매일 03:00(서울), AWS가 최근 7개 보관, 사용 용량 기준 $0.05/GB-month | 약 $1 미만 |
 | DB 덤프 | 매일 03:30(서울), 서버 `/var/backups/workout`에 14일 보관(스냅샷에도 포함) | $0 |
+| DB 덤프 서버 밖 사본 (#7) | S3 `sirloinbh-db-backups-<계정ID>`, 앱마다 매일 덤프와 행 수 파일, 30일 보관(덮어쓴 이전 버전도 30일) | 덤프가 작아 $0.1 미만 (S3 표준 $0.025/GB-month, 업로드 요청 월 수백 건) |
+| 공용 Claude API 키 읽기 (#8) | SSM Parameter Store 표준 파라미터 1개, IAM 사용자 | $0 |
 | 로그 | Docker json-file 컨테이너당 10MB×3 순환 | $0 |
 | AWS Budgets | $10. 실제 지출 50%·80%, 예상 지출 100%에서 이메일 | 무료(알림만 쓰는 예산) |
 | 합계 | | **약 $7~8** (VAT 10% 별도) |
 
 - 예산 알림은 지출을 막지 않습니다. 개인 계정 전체 비용을 대상으로 합니다.
 - 비용 근거: [Lightsail 요금](https://aws.amazon.com/lightsail/pricing/), [Budgets 요금](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/). 실제 청구액은 결제 시점의 요금·세금을 따릅니다.
-- ECR, S3, CloudWatch Logs는 쓰지 않습니다. 비용이 늘고, 서버에 장기 AWS 키를 둬야 하기 때문입니다.
+- ECR과 CloudWatch Logs는 쓰지 않습니다. S3는 DB 덤프 사본에만 씁니다. 사용자가 서버에 장기 AWS 키를 두는 대신 서버 밖 사본을 갖기로 정했습니다(2026-10-27, project-standards#262). 서버 키는 버킷에 올리기만 하는 키와 Claude 키 하나만 읽는 키, 두 개뿐입니다(10장).
 - 도메인이 없어 HTTP로 접속합니다. IP 제한은 걸리지만 전송 구간은 암호화되지 않습니다. 공용 Wi-Fi에서는 SSH 터널을 씁니다(6장).
 
 ## 1. 처음 한 번 준비
@@ -37,12 +39,28 @@ winget install --id Amazon.AWSCLI --exact
 Terraform 전용 IAM 사용자를 만들고 그 사용자의 액세스 키를 씁니다.
 
 1. 루트 계정으로 콘솔에 로그인 → IAM → 사용자 → 사용자 생성. 이름 예: `terraform-workout`. 콘솔 액세스는 주지 않습니다.
-2. 권한 탭 → 권한 추가 → 인라인 정책 생성 → JSON:
+2. 권한 탭 → 권한 추가 → 인라인 정책 생성 → JSON (이미 만든 사용자는 기존 인라인 정책을 이 내용으로 바꿉니다. `BackupBucket`·`ServerUsers`는 #7·#8에서 더했습니다):
    ```json
    {
      "Version": "2012-10-17",
      "Statement": [
        { "Sid": "Lightsail", "Effect": "Allow", "Action": "lightsail:*", "Resource": "*" },
+       {
+         "Sid": "BackupBucket",
+         "Effect": "Allow",
+         "Action": "s3:*",
+         "Resource": ["arn:aws:s3:::sirloinbh-db-backups-*", "arn:aws:s3:::sirloinbh-db-backups-*/*"]
+       },
+       {
+         "Sid": "ServerUsers",
+         "Effect": "Allow",
+         "Action": [
+           "iam:CreateUser", "iam:DeleteUser", "iam:GetUser", "iam:TagUser", "iam:UntagUser", "iam:ListUserTags",
+           "iam:PutUserPolicy", "iam:GetUserPolicy", "iam:DeleteUserPolicy", "iam:ListUserPolicies",
+           "iam:ListAttachedUserPolicies", "iam:ListAccessKeys", "iam:ListGroupsForUser"
+         ],
+         "Resource": "arn:aws:iam::*:user/workout-memo-*"
+       },
        {
          "Sid": "Budgets",
          "Effect": "Allow",
@@ -94,10 +112,10 @@ PowerShell 5.1에서 파일을 만들 때는 BOM 없는 UTF-8로 씁니다: `[IO
 terraform init
 terraform plan -out=deploy.tfplan     # 생성·변경 목록과 계정 확인
 terraform apply deploy.tfplan
-terraform output                      # static_ip, url, ssh
+terraform output                      # static_ip, url, ssh, backup_bucket, 서버 IAM 사용자 이름
 ```
 
-- 만들어지는 것: SSH 키 등록, 인스턴스, 고정 IP와 연결, 방화벽(22·80을 허용 IP에만 개방), 월 예산 알림.
+- 만들어지는 것: SSH 키 등록, 인스턴스, 고정 IP와 연결, 방화벽(22·80을 허용 IP에만 개방), 월 예산 알림, DB 덤프 사본 S3 버킷, 서버용 IAM 사용자 2개(10장).
 - plan에 교체(`-/+`)나 삭제가 있으면 apply하지 않습니다. 고정 IP를 다시 만들면 공인 주소가 바뀝니다.
 - 첫 부팅 때 `user-data.sh`가 실행됩니다. Lightsail은 user_data를 `/bin/sh`로 실행하므로, sh 래퍼가 bash 스크립트(`/usr/local/sbin/workout-init`)를 써서 실행합니다. swap 2GB, Docker·Compose 설치, 앱 저장소 clone, DB 비밀번호 생성(서버 `.env`, 외부로 나가지 않음), 백업 cron, 자동 배포 timer를 설정합니다. 몇 분 걸립니다.
 - `user_data`는 첫 부팅 때만 실행됩니다. 바꿔도 기존 인스턴스를 다시 만들지 않습니다(`ignore_changes`).
@@ -139,6 +157,8 @@ aws lightsail get-instance-port-states @p --instance-name workout-memo-app --out
 | `aws_lightsail_key_pair.deploy` | 불가 | 콘솔에서 기존 키 쌍을 지우고 apply로 새로 만듦 |
 | `aws_lightsail_instance_public_ports.app` | 불가 | apply가 같은 규칙을 덮어씀 |
 | `terraform_data.account_guard` | 해당 없음 | apply가 새로 만듦(AWS에는 만들지 않음) |
+| `aws_s3_bucket.backups`와 버킷 설정 5개 | 가능(버킷 이름) | import. 버킷을 지우면 사본도 사라지므로 새로 만들지 않음 |
+| `aws_iam_user.*`, `aws_iam_user_policy.*` | 가능(사용자 이름, `사용자:정책 이름`) | import |
 
 ### 4-3. 절차
 
@@ -213,3 +233,18 @@ aws lightsail put-alarm --profile workout-personal --alarm-name workout-memo-sta
 ## 9. 철거
 
 `terraform destroy`를 실행하면 인스턴스·고정 IP·방화벽·예산이 삭제되고, 서버 안의 DB와 덤프도 함께 사라집니다. 필요한 백업을 먼저 PC로 가져옵니다(앱 리포 문서). 자동 스냅샷은 인스턴스 삭제 후에도 남아 비용이 나올 수 있으므로 Lightsail 콘솔에서 확인합니다.
+
+## 10. 서버 키 만들기 (#7, #8)
+
+서버에는 IAM 역할을 붙일 수 없어서, 서버가 AWS를 쓰려면 액세스 키가 필요합니다. 키는 Terraform으로 만들지 않습니다(비밀 키가 state에 남지 않게). apply 뒤에 콘솔에서 만듭니다.
+
+| IAM 사용자 (`terraform output`) | 할 수 있는 일 | 서버 `.env` 키 (앱마다) |
+|---|---|---|
+| `workout-memo-backup-uploader` | 백업 버킷에 파일 올리기만 (읽기·목록·삭제 불가) | `BACKUP_S3_BUCKET`(= `backup_bucket` 출력값), `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY` |
+| `workout-memo-secrets-reader` | SSM `/sirloinbh/anthropic-api-key` 하나 읽기만 | `SECRETS_AWS_ACCESS_KEY_ID`, `SECRETS_AWS_SECRET_ACCESS_KEY` (Claude API를 쓰는 앱만, 지금은 study-log) |
+
+1. 콘솔 → IAM → 사용자 → 위 사용자 → 보안 자격 증명 → 액세스 키 만들기 → 사용 사례 "AWS 외부에서 실행되는 애플리케이션". 설명 태그에 "lightsail-server"라고 적습니다.
+2. 서버에 접속해 앱마다 `/opt/<앱>/.env`에 위 키를 넣습니다. 값은 서버에서만 입력하고 채팅·문서에 남기지 않습니다.
+3. 백업: `sudo bash /opt/<앱>/deploy/install-backup.sh` 뒤 `bash /opt/<앱>/deploy/backup.sh dump`를 실행해 "uploaded ... to s3://..."가 나오는지 봅니다.
+4. Claude 키: PC에서 `node tools/app-secrets.mjs set`(project-standards)으로 SSM 파라미터를 만든 뒤, 서버에서 `bash /opt/study-log/deploy/ssm-get.sh /sirloinbh/anthropic-api-key > /dev/null && echo ok`가 `ok`인지 봅니다(값은 출력하지 않음).
+5. 키를 바꿀 때는 새 키를 만들어 `.env`를 고친 뒤 예전 키를 비활성화·삭제합니다. 서버 키가 유출되면 이 사용자의 키를 지우고, Claude API 키도 함께 교체합니다.

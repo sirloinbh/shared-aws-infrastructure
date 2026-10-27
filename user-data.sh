@@ -40,6 +40,8 @@ fi
 chown -R ubuntu:ubuntu "$APP"
 
 # Nightly database dump at 03:30 Seoul, kept ${backup_days} days (also captured by snapshots).
+# Only for the first server: each app now installs its own dump timer with
+# deploy/install-backup.sh (project-standards#262), which also removes this cron entry.
 install -d -o ubuntu -g ubuntu -m 700 /var/backups/workout
 cat > /usr/local/bin/workout-backup <<'SCRIPT'
 #!/bin/bash
