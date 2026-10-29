@@ -1,5 +1,5 @@
 {
-  "centralSha": "e91112cfb495b6f5d832c638660adc621b9f39ae",
+  "centralSha": "7a47662beb53746a4bb08b2d2c7e708165eb2f70",
   "profile": "infra",
   "project": null,
   "files": {
@@ -65,12 +65,12 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "full",
-      "sha256": "d46f44f8a754e36522cf443bd09e3f005c18de698b162081dadc883b054b14aa",
+      "sha256": "951408a79b717b1dcebcc5e5ddb4eacc655b5c024ac0e147d4850bd7be7db260",
       "source": "templates/infra/.github/workflows/ci.yml.tmpl"
     },
     ".gitignore": {
       "mode": "section",
-      "sha256": "ece91dab1dd481eca64581c25c4f17440d1c4f6fd25c7d52f0639208045b12a6",
+      "sha256": "fbb342668d3fd142c5d5d688d59d63662961df951a92e0b0359af586e74b3328",
       "source": "templates/common/.gitignore.tmpl"
     },
     ".standards/blocked-packages.json": {
