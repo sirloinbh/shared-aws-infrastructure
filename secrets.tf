@@ -9,7 +9,7 @@ locals {
 
 # The server's read-only identity. Its access key is made in the console (docs/operations.md).
 resource "aws_iam_user" "secrets_reader" {
-  name       = "${var.project}-secrets-reader"
+  name       = "${local.shared_prefix}-secrets-reader"
   tags       = local.tags
   depends_on = [terraform_data.account_guard]
 }
