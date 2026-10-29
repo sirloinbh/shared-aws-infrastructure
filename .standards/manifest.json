@@ -1,5 +1,5 @@
 {
-  "centralSha": "8de499ef63d08e5855e1af046a89f2a278345bea",
+  "centralSha": "e91112cfb495b6f5d832c638660adc621b9f39ae",
   "profile": "infra",
   "project": null,
   "files": {
@@ -65,7 +65,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "full",
-      "sha256": "08f04ff6ac8304cc52f9337469c9cfb692d71705fc805a11f0d1f5ed293ce4c0",
+      "sha256": "d46f44f8a754e36522cf443bd09e3f005c18de698b162081dadc883b054b14aa",
       "source": "templates/infra/.github/workflows/ci.yml.tmpl"
     },
     ".gitignore": {
