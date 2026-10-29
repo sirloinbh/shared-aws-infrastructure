@@ -59,3 +59,8 @@ variable "backup_retention_days" {
   type    = number
   default = 14
 }
+# Off-site dump copies in S3 (#7): current and overwritten versions expire after this many days.
+variable "offsite_backup_days" {
+  type    = number
+  default = 30
+}
