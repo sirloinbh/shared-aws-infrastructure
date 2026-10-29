@@ -59,7 +59,7 @@ Terraform 전용 IAM 사용자를 만들고 그 사용자의 액세스 키를 �
            "iam:PutUserPolicy", "iam:GetUserPolicy", "iam:DeleteUserPolicy", "iam:ListUserPolicies",
            "iam:ListAttachedUserPolicies", "iam:ListAccessKeys", "iam:ListGroupsForUser"
          ],
-         "Resource": "arn:aws:iam::*:user/workout-memo-*"
+         "Resource": ["arn:aws:iam::*:user/sirloinbh-apps-*", "arn:aws:iam::*:user/workout-memo-*"]
        },
        {
          "Sid": "Budgets",
@@ -238,13 +238,20 @@ aws lightsail put-alarm --profile workout-personal --alarm-name workout-memo-sta
 
 서버에는 IAM 역할을 붙일 수 없어서, 서버가 AWS를 쓰려면 액세스 키가 필요합니다. 키는 Terraform으로 만들지 않습니다(비밀 키가 state에 남지 않게). apply 뒤에 콘솔에서 만듭니다.
 
-| IAM 사용자 (`terraform output`) | 할 수 있는 일 | 서버 `.env` 키 (앱마다) |
+두 사용자는 서버의 모든 앱이 같이 쓰므로 특정 앱 이름이 아니라 `sirloinbh-apps-*`로 만듭니다(project-standards ADR-0010). 2026-10-29 처음 만들 때는 `workout-memo-*`였습니다. 1-2 정책의 `ServerUsers`에 두 이름을 모두 둔 것은 예전 사용자를 지우는 apply 때문입니다. 그 apply가 끝나면 `workout-memo-*`는 빼도 됩니다.
+
+| IAM 사용자 (`terraform output`) | 할 수 있는 일 | 서버 공용 파일 `/opt/project-standards/.env`의 키 |
 |---|---|---|
-| `workout-memo-backup-uploader` | 백업 버킷에 파일 올리기만 (읽기·목록·삭제 불가) | `BACKUP_S3_BUCKET`(= `backup_bucket` 출력값), `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY` |
-| `workout-memo-secrets-reader` | SSM `/sirloinbh/anthropic-api-key` 하나 읽기만 | `SECRETS_AWS_ACCESS_KEY_ID`, `SECRETS_AWS_SECRET_ACCESS_KEY` (Claude API를 쓰는 앱만, 지금은 study-log) |
+| `sirloinbh-apps-backup-uploader` | 백업 버킷에 파일 올리기만 (읽기·목록·삭제 불가) | `BACKUP_S3_BUCKET`(= `backup_bucket` 출력값), `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY` |
+| `sirloinbh-apps-secrets-reader` | SSM `/sirloinbh/anthropic-api-key` 하나 읽기만 | `SECRETS_AWS_ACCESS_KEY_ID`, `SECRETS_AWS_SECRET_ACCESS_KEY` (Claude API를 쓰는 앱이 읽음, 지금은 study-log) |
 
 1. 콘솔 → IAM → 사용자 → 위 사용자 → 보안 자격 증명 → 액세스 키 만들기 → 사용 사례 "AWS 외부에서 실행되는 애플리케이션". 설명 태그에 "lightsail-server"라고 적습니다.
-2. 서버에 접속해 앱마다 `/opt/<앱>/.env`에 위 키를 넣습니다. 값은 서버에서만 입력하고 채팅·문서에 남기지 않습니다.
+2. 서버에 접속해 공용 파일 `/opt/project-standards/.env` 한 곳에 위 키를 넣습니다. 앱마다 넣지 않습니다. 값은 서버에서만 입력하고 채팅·문서에 남기지 않습니다. 파일은 처음 한 번 만듭니다:
+   ```bash
+   sudo install -d -o ubuntu -g ubuntu -m 700 /opt/project-standards
+   install -m 600 /dev/null /opt/project-standards/.env
+   ```
+   앱의 배포 스크립트가 이 파일을 읽으려면 project-standards#266의 동기화 PR이 그 앱에 병합되어 있어야 합니다.
 3. 백업: `sudo bash /opt/<앱>/deploy/install-backup.sh` 뒤 `bash /opt/<앱>/deploy/backup.sh dump`를 실행해 "uploaded ... to s3://..."가 나오는지 봅니다.
 4. Claude 키: PC에서 `node tools/app-secrets.mjs set`(project-standards)으로 SSM 파라미터를 만든 뒤, 서버에서 `bash /opt/study-log/deploy/ssm-get.sh /sirloinbh/anthropic-api-key > /dev/null && echo ok`가 `ok`인지 봅니다(값은 출력하지 않음).
 5. 키를 바꿀 때는 새 키를 만들어 `.env`를 고친 뒤 예전 키를 비활성화·삭제합니다. 서버 키가 유출되면 이 사용자의 키를 지우고, Claude API 키도 함께 교체합니다.

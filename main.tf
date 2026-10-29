@@ -3,6 +3,9 @@
 # monthly cost alert. Runbook: docs/deployment.md.
 locals {
   tags = { Project = var.project }
+  # Server identities every app on the server shares (#7, #8) are not named after one app
+  # (project-standards ADR-0010, #266).
+  shared_prefix = "sirloinbh-apps"
 }
 
 data "aws_caller_identity" "current" {}
