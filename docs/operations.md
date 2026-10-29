@@ -55,11 +55,11 @@ Terraform 전용 IAM 사용자를 만들고 그 사용자의 액세스 키를 �
          "Sid": "ServerUsers",
          "Effect": "Allow",
          "Action": [
-           "iam:CreateUser", "iam:DeleteUser", "iam:GetUser", "iam:TagUser", "iam:UntagUser", "iam:ListUserTags",
+           "iam:CreateUser", "iam:DeleteUser", "iam:GetUser", "iam:UpdateUser", "iam:TagUser", "iam:UntagUser", "iam:ListUserTags",
            "iam:PutUserPolicy", "iam:GetUserPolicy", "iam:DeleteUserPolicy", "iam:ListUserPolicies",
            "iam:ListAttachedUserPolicies", "iam:ListAccessKeys", "iam:ListGroupsForUser"
          ],
-         "Resource": ["arn:aws:iam::*:user/sirloinbh-apps-*", "arn:aws:iam::*:user/workout-memo-*"]
+         "Resource": "arn:aws:iam::*:user/sirloinbh-apps-*"
        },
        {
          "Sid": "Budgets",
@@ -110,7 +110,7 @@ PowerShell 5.1에서 파일을 만들 때는 BOM 없는 UTF-8로 씁니다: `[IO
 
 ```powershell
 terraform init
-terraform plan -out=deploy.tfplan     # 생성·변경 목록과 계정 확인
+terraform plan "-out=deploy.tfplan"   # 생성·변경 목록과 계정 확인 (PowerShell은 따옴표가 없으면 `-out=`을 점에서 나눔)
 terraform apply deploy.tfplan
 terraform output                      # static_ip, url, ssh, backup_bucket, 서버 IAM 사용자 이름
 ```
@@ -185,7 +185,7 @@ aws lightsail get-instance-port-states @p --instance-name workout-memo-app --out
      id = "${var.expected_account_id}:${var.project}-monthly"
    }
    ```
-2. `terraform init`, `terraform plan -out=import.tfplan`. 기대 결과는 `4 to import, 3 to add, 0 to change, 0 to destroy`입니다. 다르면 apply하지 않습니다.
+2. `terraform init`, `terraform plan "-out=import.tfplan"`. 기대 결과는 `4 to import, 3 to add, 0 to change, 0 to destroy`입니다. 다르면 apply하지 않습니다.
 3. Lightsail 콘솔 → 계정 → SSH 키에서 서울 리전의 `workout-memo-deploy`를 삭제합니다. 실행 중인 인스턴스는 영향을 받지 않습니다.
 4. `terraform apply import.tfplan` 뒤 `terraform plan`이 "No changes"인지 확인합니다.
 5. `imports.local.tf`, `import.tfplan`을 지우고 3장대로 state를 백업합니다.
@@ -238,7 +238,7 @@ aws lightsail put-alarm --profile workout-personal --alarm-name workout-memo-sta
 
 서버에는 IAM 역할을 붙일 수 없어서, 서버가 AWS를 쓰려면 액세스 키가 필요합니다. 키는 Terraform으로 만들지 않습니다(비밀 키가 state에 남지 않게). apply 뒤에 콘솔에서 만듭니다.
 
-두 사용자는 서버의 모든 앱이 같이 쓰므로 특정 앱 이름이 아니라 `sirloinbh-apps-*`로 만듭니다(project-standards ADR-0010). 2026-10-29 처음 만들 때는 `workout-memo-*`였습니다. 1-2 정책의 `ServerUsers`에 두 이름을 모두 둔 것은 예전 사용자를 지우는 apply 때문입니다. 그 apply가 끝나면 `workout-memo-*`는 빼도 됩니다.
+두 사용자는 서버의 모든 앱이 같이 쓰므로 특정 앱 이름이 아니라 `sirloinbh-apps-*`로 만듭니다(project-standards ADR-0010). 2026-10-29 처음에는 `workout-memo-*`로 만들었고, 같은 날 이름만 바꿨습니다(`iam:UpdateUser`, plan `2 to add, 2 to change, 2 to destroy`: 사용자는 제자리에서 이름 변경, 인라인 정책은 다시 붙임). 이름을 바꾸는 동안에는 1-2 `ServerUsers`의 `Resource`에 예전 이름과 새 이름이 모두 있어야 합니다.
 
 | IAM 사용자 (`terraform output`) | 할 수 있는 일 | 서버 공용 파일 `/opt/project-standards/.env`의 키 |
 |---|---|---|
