@@ -12,7 +12,7 @@
 ```sh
 cp terraform.tfvars.example terraform.tfvars   # 개인 값 입력, git 제외
 terraform init
-terraform plan -out=deploy.tfplan
+terraform plan "-out=deploy.tfplan"
 terraform apply deploy.tfplan
 ```
 
