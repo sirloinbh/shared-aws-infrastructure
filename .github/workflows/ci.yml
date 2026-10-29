@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   ci:
-    uses: sirloinbh/project-standards/.github/workflows/reusable-infra-ci.yml@978bfed0c73ea6b89de35f5c507b296835a8e381
+    uses: sirloinbh/project-standards/.github/workflows/reusable-infra-ci.yml@f80624f0cb3fa9a891cd95fca1fbcf9d3db28091
     with:
       terraform-version: '1.16.5'
       node-version: '24.21.0'
