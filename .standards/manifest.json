@@ -1,5 +1,5 @@
 {
-  "centralSha": "9de7b11b985c34869cd0a6c99a7ab22e1ccf18dd",
+  "centralSha": "3f3bf8d44a5f0321c46a93ddd7d375daa96d104f",
   "profile": "infra",
   "project": null,
   "files": {
@@ -20,7 +20,7 @@
     },
     ".claude/skills/std-backlog/SKILL.md": {
       "mode": "full",
-      "sha256": "5fc503c93357a8fef8e8887135cb3a3649a04e9be779a14f84312a3ee5e50425",
+      "sha256": "ac1fab257c1e2fcd121e79ad6e80c40307fe5701e0f6947b22f49590c7a204bf",
       "source": "templates/common/skills/std-backlog/SKILL.md"
     },
     ".claude/skills/std-communication/SKILL.md": {
@@ -135,7 +135,7 @@
     },
     "skills/std-backlog/SKILL.md": {
       "mode": "full",
-      "sha256": "5fc503c93357a8fef8e8887135cb3a3649a04e9be779a14f84312a3ee5e50425",
+      "sha256": "ac1fab257c1e2fcd121e79ad6e80c40307fe5701e0f6947b22f49590c7a204bf",
       "source": "templates/common/skills/std-backlog/SKILL.md"
     },
     "skills/std-communication/SKILL.md": {
