@@ -1,5 +1,5 @@
 {
-  "centralSha": "7a47662beb53746a4bb08b2d2c7e708165eb2f70",
+  "centralSha": "6eda336ddff5e5b3ae4bc5bd8f92afc72b9a0e86",
   "profile": "infra",
   "project": null,
   "files": {
@@ -10,7 +10,7 @@
     },
     ".claude/settings.json": {
       "mode": "full",
-      "sha256": "2538d11ab7805e3e8d418571d70d6834ad01de10f2022d83d179c7d6369b5060",
+      "sha256": "117d5ee72843ff8af56c0dbbc5e073b49cc33a9b82f00a6cff0cdb10949b9f13",
       "source": "templates/common/.claude/settings.json.tmpl"
     },
     ".claude/skills/std-backlog/SKILL.md": {
@@ -25,7 +25,7 @@
     },
     ".claude/skills/std-git-writing/SKILL.md": {
       "mode": "full",
-      "sha256": "dc6d13a0972e116dfa473ccd600918feeca77dc4a113a836fda622985f6b025a",
+      "sha256": "cce7987e8e692b3853b0a06b7b1424e602d335349be3d5a572d9f76e36b86ee6",
       "source": "templates/common/skills/std-git-writing/SKILL.md"
     },
     ".claude/skills/std-implementation/SKILL.md": {
@@ -37,6 +37,11 @@
       "mode": "full",
       "sha256": "f67c8b4349aa157c221e7195fba9c7f3206b4e381d1f96ff0c91474a119820e3",
       "source": "templates/common/.codex/hooks.json.tmpl"
+    },
+    ".codex/rules/git-branch.rules": {
+      "mode": "full",
+      "sha256": "273a076425113c8b411341a0675a832c909964ffbe1f44a8886e322abac2f5e9",
+      "source": "templates/common/.codex/rules/git-branch.rules"
     },
     ".codex/rules/package-installs.rules": {
       "mode": "full",
@@ -135,7 +140,7 @@
     },
     "skills/std-git-writing/SKILL.md": {
       "mode": "full",
-      "sha256": "dc6d13a0972e116dfa473ccd600918feeca77dc4a113a836fda622985f6b025a",
+      "sha256": "cce7987e8e692b3853b0a06b7b1424e602d335349be3d5a572d9f76e36b86ee6",
       "source": "templates/common/skills/std-git-writing/SKILL.md"
     },
     "skills/std-implementation/SKILL.md": {
