@@ -1,86 +1,91 @@
 {
-  "centralSha": "5c3039c306b546445b55697f9b716b1f6b24f6be",
+  "centralSha": "bcf8ed6d61b0f61c90299f77503c4ec032f0ff68",
   "profile": "infra",
   "project": null,
   "files": {
+    ".claude/hooks/block-forbidden-commands.mjs": {
+      "mode": "full",
+      "sha256": "e5834cbb825b0097ca6954440e9910640b3face43b4ac67a275d076f9a4eee23",
+      "source": "templates/common/.claude/hooks/block-forbidden-commands.mjs"
+    },
     ".claude/hooks/block-package-installs.mjs": {
       "mode": "full",
-      "sha256": "eb4fd729989c4f45319020c8f5d993381c17136bfd5ec4e9ee52146bd49050ce",
+      "sha256": "0f757d6ab647f25fb5aac5317df990c7c7a64fbe91c93200ae057fbb9a64b013",
       "source": "templates/common/.claude/hooks/block-package-installs.mjs"
     },
     ".claude/hooks/pc-setup-notice.mjs": {
       "mode": "full",
-      "sha256": "33b42fea0106532e8a7dbc9682f9c507a555028a6d21fa4d12ca58ccea2b5983",
+      "sha256": "41cb2e6fe2f2166f30932cd10896d39cb00a5e733031b45999ed1f93f3283042",
       "source": "templates/common/.claude/hooks/pc-setup-notice.mjs"
     },
     ".claude/settings.json": {
       "mode": "full",
-      "sha256": "7fd5612d18e2952f085afe612e07b83f9dd2c4789994c2e8b690a71cacc0eb2a",
+      "sha256": "0f4fe35fd6af44bbf9b99895a7daf80a9ae4e3938f17ae02c47f62d01062b25f",
       "source": "templates/common/.claude/settings.json.tmpl"
     },
     ".claude/skills/std-backlog/SKILL.md": {
       "mode": "full",
-      "sha256": "24fc15a48fd17e3ef9f6b0468593ddfac0f5269b9357fbe14f19f9baf7bee2b5",
+      "sha256": "b97fab84b9515b7fe9fd68ba0ebe7e716162886a0946368a834549a5ab6d05de",
       "source": "templates/common/skills/std-backlog/SKILL.md"
     },
     ".claude/skills/std-communication/SKILL.md": {
       "mode": "full",
-      "sha256": "1a3ad4cdb7776523a79f7eb32347ff387c63758e8991c83b7380e01da113fd13",
+      "sha256": "2487a690de4ef5cd52fddef0d7e81bda5e4bd0957b90b5fdd9916c2b78b70b9d",
       "source": "templates/common/skills/std-communication/SKILL.md"
     },
     ".claude/skills/std-git-writing/SKILL.md": {
       "mode": "full",
-      "sha256": "6bdd8344acfc9ce6c3108c3bdb9fd706131c48f6847695ff9d1057543860f68e",
+      "sha256": "2be04004a2b82607ddf015f4543b7ee793ac5a87444862f8c3ab3e5d92026487",
       "source": "templates/common/skills/std-git-writing/SKILL.md"
     },
     ".claude/skills/std-implementation/SKILL.md": {
       "mode": "full",
-      "sha256": "f9a316fffea56d6588970acc2dd1e63ddca8bae513b9033612cad0141a339b50",
+      "sha256": "1920a1fcf817769ed142ad0e9f704da6c6ceaa94409ee6bef7f06387fc7e5b76",
       "source": "templates/common/skills/std-implementation/SKILL.md"
     },
     ".codex/hooks.json": {
       "mode": "full",
-      "sha256": "f67c8b4349aa157c221e7195fba9c7f3206b4e381d1f96ff0c91474a119820e3",
+      "sha256": "a6d85bfb15069a89e90ceeba01ce82e5837ab2766f6e03d6459242488d8dbfbc",
       "source": "templates/common/.codex/hooks.json.tmpl"
     },
     ".codex/rules/git-branch.rules": {
       "mode": "full",
-      "sha256": "273a076425113c8b411341a0675a832c909964ffbe1f44a8886e322abac2f5e9",
+      "sha256": "467f15be697997711c349a4dbb89b6223e4f0cb5450c2bdfb41e859941a1bcb0",
       "source": "templates/common/.codex/rules/git-branch.rules"
     },
     ".codex/rules/package-installs.rules": {
       "mode": "full",
-      "sha256": "e7170be604dd8d6a455f1f5925f4f4fb86582202707ce1000357bb4721c05e22",
+      "sha256": "a5700cbb8d7bc53e289102f760da94f2f49a19fbc5432ac88793c846cbe94122",
       "source": "templates/common/.codex/rules/package-installs.rules"
     },
     ".editorconfig": {
       "mode": "full",
-      "sha256": "13be88a388438937194215f18e8bc7bb3f149c1b8ada6082cab994f473367d26",
+      "sha256": "615b65b0043e7f6a0305fe5c744621a896dc50f3c27bca12f874b5bb514bd7af",
       "source": "templates/common/.editorconfig.tmpl"
     },
     ".gitattributes": {
       "mode": "full",
-      "sha256": "b74f1a577187c78925dda4b8efc44c6bf0b27c5393e0163b319ad120e7c73efb",
+      "sha256": "2bbd8b0637dbc8eac24d9bb8018a5bf2ebe3f4d52a3470bff9e9a7976390a544",
       "source": "templates/common/.gitattributes.tmpl"
     },
     ".github/ISSUE_TEMPLATE/task.md": {
       "mode": "full",
-      "sha256": "2a7302c9ba872e11e2162cf4cc54880474a6bcbe8378c0c766223856453c9df1",
+      "sha256": "7c4716656f588e8eb6027a038979603bcf3f40eec821c0d9458990420f27e27e",
       "source": "templates/common/.github/ISSUE_TEMPLATE/task.md"
     },
     ".github/pull_request_template.md": {
       "mode": "full",
-      "sha256": "3ccf4a6bb7e3b9043c29c5adaad58e18af8af8a98195924b1eea5b4221d04e3e",
+      "sha256": "b6466c501d19f3f14582dcd517fb6e91f7f9634152f184e204ab197edd5d815a",
       "source": "templates/common/.github/pull_request_template.md"
     },
     ".github/workflows/ci.yml": {
       "mode": "full",
-      "sha256": "951408a79b717b1dcebcc5e5ddb4eacc655b5c024ac0e147d4850bd7be7db260",
+      "sha256": "0d95180245db3d21ad59ee643ff2e2b1af8365da17e4e73f45ef29ff25c01d75",
       "source": "templates/infra/.github/workflows/ci.yml.tmpl"
     },
     ".gitignore": {
       "mode": "section",
-      "sha256": "fbb342668d3fd142c5d5d688d59d63662961df951a92e0b0359af586e74b3328",
+      "sha256": "fc3607e334d58265a88f25d8f34ea1f26ee71c420f2e97bc3fc7d249ca976614",
       "source": "templates/common/.gitignore.tmpl"
     },
     ".standards/blocked-packages.json": {
@@ -90,42 +95,42 @@
     },
     ".standards/check.mjs": {
       "mode": "full",
-      "sha256": "e5d4c62dd1538ac2ae2b72ffd9367a2ba078fd5d3721c12788d58026313bf726",
+      "sha256": "fbd266416cbd51fe62b81d05701113ea08d23d4ed3ab9ea0fee371874ec14966",
       "source": "scripts/standards-check.mjs"
     },
     ".standards/ioc-scan.mjs": {
       "mode": "full",
-      "sha256": "5b679e13e3ed79bd56a94ffdf859a44f47fde838051cfd9ce14df8a85a41813e",
+      "sha256": "a89be5071d7761fe9a77a9f9b3a14288aa2a261a04a55e46a21d1fe09e5d75b6",
       "source": "scripts/ioc-scan.mjs"
     },
     ".standards/lib/hash.mjs": {
       "mode": "full",
-      "sha256": "73e91203e9ce8952449ffcc3cfbe724892ba043a39cf1f075bf7533985122b98",
+      "sha256": "a22ef363d077ac564ebb6a36c9e10130d3b012de074051a70a55dab2c16e8f47",
       "source": "scripts/lib/hash.mjs"
     },
     ".standards/lib/lockfiles.mjs": {
       "mode": "full",
-      "sha256": "61fe8fc2f09559d2d11cdbd60289030bb380b4c129958936396255cdde7bfdd2",
+      "sha256": "9cdebe7889490666c8690b76c51393746e7af4d6c4cf02ef1137d86afc3387c2",
       "source": "scripts/lib/lockfiles.mjs"
     },
     ".standards/lib/manifest.mjs": {
       "mode": "full",
-      "sha256": "1ecfad3d22b333c774185bd6bb5e31bce3f578aa7c341b9e22878ed4e9b16ec9",
+      "sha256": "cd27f8b1877953444c098a406bedef1eb455fe15403fda194ef47d76bbb85f03",
       "source": "scripts/lib/manifest.mjs"
     },
     ".standards/lib/render.mjs": {
       "mode": "full",
-      "sha256": "60531b0741e0406f4229d7ccfb6b2b2d38b4c6ed421446871862b36db91fb72b",
+      "sha256": "8b832e4746f8b731d087642551f837190dd20172a1f7789c153efae55d699817",
       "source": "scripts/lib/render.mjs"
     },
     ".standards/lockfiles.mjs": {
       "mode": "full",
-      "sha256": "0e2d11edd148e4b2ba1acae4e75869ddc71dd52be06a0eed85625eb12950d195",
+      "sha256": "d7f566edefdc07ac8873a15d24899f46d6e0865a6b18b7997bb7e18d994dc7ad",
       "source": "scripts/lockfiles.mjs"
     },
     ".standards/secret-scan.mjs": {
       "mode": "full",
-      "sha256": "ec151cd5caef84f81e4e13c3ae4ce79fa59431f656b2850126f00a60be2712b0",
+      "sha256": "cb6a324f3b8207b779bfb4ef48cff98527461f2761c0d83a322a46e45e209fa8",
       "source": "scripts/secret-scan.mjs"
     },
     ".vscode/settings.json": {
@@ -135,22 +140,22 @@
     },
     "skills/std-backlog/SKILL.md": {
       "mode": "full",
-      "sha256": "24fc15a48fd17e3ef9f6b0468593ddfac0f5269b9357fbe14f19f9baf7bee2b5",
+      "sha256": "b97fab84b9515b7fe9fd68ba0ebe7e716162886a0946368a834549a5ab6d05de",
       "source": "templates/common/skills/std-backlog/SKILL.md"
     },
     "skills/std-communication/SKILL.md": {
       "mode": "full",
-      "sha256": "1a3ad4cdb7776523a79f7eb32347ff387c63758e8991c83b7380e01da113fd13",
+      "sha256": "2487a690de4ef5cd52fddef0d7e81bda5e4bd0957b90b5fdd9916c2b78b70b9d",
       "source": "templates/common/skills/std-communication/SKILL.md"
     },
     "skills/std-git-writing/SKILL.md": {
       "mode": "full",
-      "sha256": "6bdd8344acfc9ce6c3108c3bdb9fd706131c48f6847695ff9d1057543860f68e",
+      "sha256": "2be04004a2b82607ddf015f4543b7ee793ac5a87444862f8c3ab3e5d92026487",
       "source": "templates/common/skills/std-git-writing/SKILL.md"
     },
     "skills/std-implementation/SKILL.md": {
       "mode": "full",
-      "sha256": "f9a316fffea56d6588970acc2dd1e63ddca8bae513b9033612cad0141a339b50",
+      "sha256": "1920a1fcf817769ed142ad0e9f704da6c6ceaa94409ee6bef7f06387fc7e5b76",
       "source": "templates/common/skills/std-implementation/SKILL.md"
     }
   },

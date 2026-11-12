@@ -1,5 +1,5 @@
-# 중앙 관리 파일. 수정은 sirloinbh/project-standards의 templates/infra/.github/workflows/에서
-# 중앙 공통 CI(reusable-infra-ci)를 동기화한 중앙 커밋으로 고정해 호출한다. terraform apply는 하지 않는다.
+# Managed file. Edit it in sirloinbh/project-standards templates/infra/.github/workflows/
+# Calls the central shared CI (reusable-infra-ci) pinned to the central commit that was synced. It does not run terraform apply.
 name: ci
 
 on: [push, pull_request]
@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   ci:
-    uses: sirloinbh/project-standards/.github/workflows/reusable-infra-ci.yml@c96579243e212b5fcc24b74961256ac7e73173de
+    uses: sirloinbh/project-standards/.github/workflows/reusable-infra-ci.yml@354d413af53a9073b0fab9671de269c25d080a93
     with:
       terraform-version: '1.16.5'
       node-version: '24.21.0'
