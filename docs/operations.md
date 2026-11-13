@@ -1,45 +1,45 @@
-# 인프라 운영
+# Infrastructure operations
 
-개인 AWS 계정 서울 리전의 Lightsail 서버 한 대를 Terraform으로 만들고 관리하는 절차입니다. 서버 안의 앱 배포·롤백·자동 배포·DB 백업 복원은 앱 리포 문서(workout-memo `docs/deployment.md`)를 따릅니다.
+This is the procedure for creating and managing one Lightsail server in the Seoul region of the personal AWS account with Terraform. App deploys, rollbacks, auto-deploy, and DB backup restore inside the server follow the app repo doc (workout-memo `docs/deployment.md`).
 
-명령은 모두 이 리포 폴더에서 실행합니다. 예시의 프로필 이름은 `workout-personal`입니다.
+Run every command in this repo's folder. The profile name in the examples is `workout-personal`.
 
-## 구성과 비용
+## Setup and costs
 
-| 항목 | 값 | 월 비용(세전, 추정) |
+| Item | Value | Monthly cost (before tax, estimate) |
 |---|---|---|
-| Lightsail `micro_3_0`, 서울 | 1GB RAM, 40GB SSD, 공인 IPv4, 2TB 전송, Ubuntu 24.04 | $7.00 |
-| 고정 IP | 인스턴스에 연결된 동안 | $0 |
-| 자동 스냅샷 | 매일 03:00(서울), AWS가 최근 7개 보관, 사용 용량 기준 $0.05/GB-month | 약 $1 미만 |
-| DB 덤프 | 매일 03:30(서울), 서버 `/var/backups/workout`에 14일 보관(스냅샷에도 포함) | $0 |
-| DB 덤프 서버 밖 사본 (#7) | S3 `sirloinbh-db-backups-<계정ID>`, 앱마다 매일 덤프와 행 수 파일, 30일 보관(덮어쓴 이전 버전도 30일) | 덤프가 작아 $0.1 미만 (S3 표준 $0.025/GB-month, 업로드 요청 월 수백 건) |
-| 공용 Claude API 키 읽기 (#8) | SSM Parameter Store 표준 파라미터 1개, IAM 사용자 | $0 |
-| 로그 | Docker json-file 컨테이너당 10MB×3 순환 | $0 |
-| AWS Budgets | $10. 실제 지출 50%·80%, 예상 지출 100%에서 이메일 | 무료(알림만 쓰는 예산) |
-| 합계 | | **약 $7~8** (VAT 10% 별도) |
+| Lightsail `micro_3_0`, Seoul | 1GB RAM, 40GB SSD, public IPv4, 2TB transfer, Ubuntu 24.04 | $7.00 |
+| Static IP | While attached to the instance | $0 |
+| Automatic snapshots | Daily at 03:00 (Seoul time), AWS keeps the latest 7, $0.05/GB-month by used size | under about $1 |
+| DB dump | Daily at 03:30 (Seoul time), kept for 14 days in `/var/backups/workout` on the server (also included in the snapshots) | $0 |
+| Off-server copy of the DB dump (#7) | S3 `sirloinbh-db-backups-<account ID>`, a daily dump and a row-count file per app, kept for 30 days (overwritten earlier versions also 30 days) | under $0.1 because the dumps are small (S3 Standard $0.025/GB-month, a few hundred upload requests a month) |
+| Reading the shared Claude API key (#8) | One SSM Parameter Store standard parameter, an IAM user | $0 |
+| Logs | Docker json-file, 10MB x 3 rotation per container | $0 |
+| AWS Budgets | $10. Email at 50% and 80% of actual spend and 100% of forecasted spend | Free (a budget used only for alerts) |
+| Total | | **about $7-8** (plus 10% VAT) |
 
-- 예산 알림은 지출을 막지 않습니다. 개인 계정 전체 비용을 대상으로 합니다.
-- 비용 근거: [Lightsail 요금](https://aws.amazon.com/lightsail/pricing/), [Budgets 요금](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/). 실제 청구액은 결제 시점의 요금·세금을 따릅니다.
-- ECR과 CloudWatch Logs는 쓰지 않습니다. S3는 DB 덤프 사본에만 씁니다. 사용자가 서버에 장기 AWS 키를 두는 대신 서버 밖 사본을 갖기로 정했습니다(2026-10-27, project-standards#262). 서버 키는 버킷에 올리기만 하는 키와 Claude 키 하나만 읽는 키, 두 개뿐입니다(10장).
-- 도메인이 없어 HTTP로 접속합니다. IP 제한은 걸리지만 전송 구간은 암호화되지 않습니다. 공용 Wi-Fi에서는 SSH 터널을 씁니다(6장).
+- The budget alert does not stop spending. It covers the cost of the whole personal account.
+- Cost sources: [Lightsail pricing](https://aws.amazon.com/lightsail/pricing/), [Budgets pricing](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/). The actual bill follows the prices and taxes at billing time.
+- ECR and CloudWatch Logs are not used. S3 is used only for the DB dump copies. The user decided to keep an off-server copy instead of leaving a long-lived AWS key on the server (2026-10-27, project-standards#262). The server has only two keys: one that can only upload to the bucket and one that can read only the Claude key (section 10).
+- There is no domain, so access is over HTTP. The IP restriction applies, but the transport is not encrypted. On public Wi-Fi, use an SSH tunnel (section 6).
 
-## 1. 처음 한 번 준비
+## 1. One-time setup
 
-### 1-1. 도구
+### 1-1. Tools
 
-Terraform CLI와 AWS CLI를 설치합니다. Terraform 버전은 `sirloinbh/project-standards`의 `versions.json`(`terraform.cli`)을 따릅니다.
+Install the Terraform CLI and the AWS CLI. The Terraform version follows `versions.json` (`terraform.cli`) in `sirloinbh/project-standards`.
 
 ```powershell
-winget install --id Hashicorp.Terraform --version <versions.json의 terraform.cli> --exact
+winget install --id Hashicorp.Terraform --version <terraform.cli in versions.json> --exact
 winget install --id Amazon.AWSCLI --exact
 ```
 
-### 1-2. AWS 자격 증명 (루트 키를 만들지 않습니다)
+### 1-2. AWS credentials (do not create a root key)
 
-Terraform 전용 IAM 사용자를 만들고 그 사용자의 액세스 키를 씁니다.
+Create an IAM user only for Terraform and use that user's access key.
 
-1. 루트 계정으로 콘솔에 로그인 → IAM → 사용자 → 사용자 생성. 이름 예: `terraform-workout`. 콘솔 액세스는 주지 않습니다.
-2. 권한 탭 → 권한 추가 → 인라인 정책 생성 → JSON (이미 만든 사용자는 기존 인라인 정책을 이 내용으로 바꿉니다. `BackupBucket`·`ServerUsers`는 #7·#8에서 더했습니다):
+1. Sign in to the console as the root account, then go to IAM → Users → Create user. Example name: `terraform-workout`. Do not give console access.
+2. Permissions tab → Add permissions → Create inline policy → JSON (if you already created the user, replace the existing inline policy with this content. `BackupBucket` and `ServerUsers` were added in #7 and #8):
    ```json
    {
      "Version": "2012-10-17",
@@ -73,70 +73,70 @@ Terraform 전용 IAM 사용자를 만들고 그 사용자의 액세스 키를 �
      ]
    }
    ```
-3. 보안 자격 증명 탭 → 액세스 키 만들기 → 사용 사례 "명령줄 인터페이스(CLI)". 설명 태그에 어느 PC용인지 적습니다.
-4. 회사 프로필과 섞이지 않도록 이름을 붙여 등록하고 계정을 확인합니다.
+3. Security credentials tab → Create access key → use case "Command Line Interface (CLI)". In the description tag, write which PC it is for.
+4. Register it under a name so it does not mix with the company profile, and check the account.
    ```powershell
-   aws configure --profile workout-personal       # 리전 ap-northeast-2
+   aws configure --profile workout-personal       # region ap-northeast-2
    aws sts get-caller-identity --profile workout-personal
    ```
-   `Arn`이 `...:user/terraform-workout`이고 `Account`가 개인 계정이면 됩니다.
+   It is correct if `Arn` is `...:user/terraform-workout` and `Account` is the personal account.
 
-키 값은 리포·채팅·이슈에 남기지 않습니다. AWS CLI가 처음 실행될 때 AI 에이전트용 스킬과 MCP 서버 설치를 물으면, 필요하지 않다면 `n`으로 답합니다.
+Do not leave key values in the repo, chat, or issues. When the AWS CLI asks on its first run whether to install the skill and MCP server for AI agents, answer `n` if you do not need them.
 
-### 1-3. SSH 키
+### 1-3. SSH key
 
-이 서버 전용으로 PC마다 만듭니다. 개인키는 그 PC에만 둡니다.
+Create one per PC, only for this server. Keep the private key only on that PC.
 
 ```powershell
 New-Item -ItemType Directory -Force "$HOME\.ssh" | Out-Null
-ssh-keygen -t ed25519 -f "$HOME\.ssh\workout-memo-lightsail" -C "<pc이름>-workout-memo"
-(Get-Content "$HOME\.ssh\workout-memo-lightsail.pub").Count   # 1 이어야 함
+ssh-keygen -t ed25519 -f "$HOME\.ssh\workout-memo-lightsail" -C "<pc-name>-workout-memo"
+(Get-Content "$HOME\.ssh\workout-memo-lightsail.pub").Count   # must be 1
 ```
 
-명령은 한 줄로 붙여 넣습니다. PowerShell에서 줄이 끊기면(`>>` 표시) 주석에 줄바꿈이 들어가 공개키가 두 줄이 됩니다.
+Paste the command as one line. If PowerShell breaks the line (a `>>` prompt appears), a line break enters the comment and the public key becomes two lines.
 
-### 1-4. 변수 파일
+### 1-4. Variables file
 
-`terraform.tfvars.example`을 `terraform.tfvars`로 복사하고 값을 채웁니다. 이 파일은 git에서 제외됩니다.
+Copy `terraform.tfvars.example` to `terraform.tfvars` and fill in the values. This file is excluded from git.
 
-- `aws_profile`: 1-2의 프로필 이름
-- `expected_account_id`: 다른 계정 자격 증명이면 plan이 실패합니다.
-- `allowed_cidrs`: 예 `["1.2.3.4/32"]`. 현재 공인 IP는 `https://checkip.amazonaws.com`에서 확인합니다. 서버가 이미 있으면 지금 규칙(`aws lightsail get-instance-port-states`)을 보고 맞춥니다.
+- `aws_profile`: the profile name from 1-2
+- `expected_account_id`: the plan fails if the credentials belong to another account.
+- `allowed_cidrs`: for example `["1.2.3.4/32"]`. Check your current public IP at `https://checkip.amazonaws.com`. If the server already exists, look at the current rules (`aws lightsail get-instance-port-states`) and match them.
 - `budget_emails`
 
-PowerShell 5.1에서 파일을 만들 때는 BOM 없는 UTF-8로 씁니다: `[IO.File]::WriteAllText(<경로>, <내용>, (New-Object Text.UTF8Encoding $false))`.
+When you create the file in PowerShell 5.1, write it as UTF-8 without BOM: `[IO.File]::WriteAllText(<path>, <content>, (New-Object Text.UTF8Encoding $false))`.
 
-## 2. 인프라 적용
+## 2. Apply the infrastructure
 
 ```powershell
 terraform init
-terraform plan "-out=deploy.tfplan"   # 생성·변경 목록과 계정 확인 (PowerShell은 따옴표가 없으면 `-out=`을 점에서 나눔)
+terraform plan "-out=deploy.tfplan"   # the list of creates and changes, and the account check (without quotes, PowerShell splits `-out=` at the dot)
 terraform apply deploy.tfplan
-terraform output                      # static_ip, url, ssh, backup_bucket, 서버 IAM 사용자 이름
+terraform output                      # static_ip, url, ssh, backup_bucket, the server IAM user names
 ```
 
-- 만들어지는 것: SSH 키 등록, 인스턴스, 고정 IP와 연결, 방화벽(22·80을 허용 IP에만 개방), 월 예산 알림, DB 덤프 사본 S3 버킷, 서버용 IAM 사용자 2개(10장).
-- plan에 교체(`-/+`)나 삭제가 있으면 apply하지 않습니다. 고정 IP를 다시 만들면 공인 주소가 바뀝니다.
-- 첫 부팅 때 `user-data.sh`가 실행됩니다. Lightsail은 user_data를 `/bin/sh`로 실행하므로, sh 래퍼가 bash 스크립트(`/usr/local/sbin/workout-init`)를 써서 실행합니다. swap 2GB, Docker·Compose 설치, 앱 저장소 clone, DB 비밀번호 생성(서버 `.env`, 외부로 나가지 않음), 백업 cron, 자동 배포 timer를 설정합니다. 몇 분 걸립니다.
-- `user_data`는 첫 부팅 때만 실행됩니다. 바꿔도 기존 인스턴스를 다시 만들지 않습니다(`ignore_changes`).
+- What gets created: the SSH key registration, the instance, the static IP and its attachment, the firewall (ports 22 and 80 open only to the allowed IPs), the monthly budget alert, the S3 bucket for DB dump copies, and two IAM users for the server (section 10).
+- If the plan has a replacement (`-/+`) or a deletion, do not apply. Recreating the static IP changes the public address.
+- `user-data.sh` runs on the first boot. Lightsail runs user_data with `/bin/sh`, so an sh wrapper writes and runs a bash script (`/usr/local/sbin/workout-init`). It sets up 2GB of swap, the Docker and Compose install, the app repository clone, DB password generation (the server `.env`, which never leaves the server), the backup cron, and the auto-deploy timer. It takes a few minutes.
+- `user_data` runs only on the first boot. Changing it does not recreate the existing instance (`ignore_changes`).
 
-## 3. state 관리
+## 3. State management
 
-- remote backend(S3 등)가 없습니다. state(`terraform.tfstate`)는 apply한 PC의 이 폴더에만 있고 git에서 제외됩니다.
-- apply 뒤에는 state와 `terraform.tfvars`를 리포 밖에 백업합니다. OneDrive처럼 클라우드로 동기화되는 폴더는 피합니다.
+- There is no remote backend (S3 or similar). The state (`terraform.tfstate`) lives only in this folder on the PC that applied, and it is excluded from git.
+- After each apply, back up the state and `terraform.tfvars` outside the repo. Avoid folders that sync to the cloud, such as OneDrive.
   ```powershell
   $bak = "$HOME\Backups\terraform-$(Get-Date -Format yyyyMMdd)"
   New-Item -ItemType Directory -Force $bak | Out-Null
   Copy-Item terraform.tfstate*, terraform.tfvars $bak
   ```
-- 다른 PC로 옮길 때는 백업한 파일을 새 PC의 이 폴더에 복사하고 `terraform init`, `terraform plan`으로 "No changes"를 확인합니다.
-- provider 버전을 올리면 state가 새 형식으로 저장되어 되돌릴 수 없습니다. 버전 변경 PR을 먼저 병합한 뒤 apply합니다.
+- To move to another PC, copy the backed-up files into this folder on the new PC and check for "No changes" with `terraform init` and `terraform plan`.
+- Raising the provider version saves the state in a new format that cannot be undone. Merge the version-change PR first, then apply.
 
-## 4. state를 잃었을 때 (import로 다시 만들기)
+## 4. When you lose the state (recreate it with import)
 
-state 없이 plan하면 모든 리소스를 새로 만들려고 합니다. 그대로 apply하지 말고 기존 리소스를 import합니다.
+If you plan without a state, Terraform tries to create every resource anew. Do not apply as is; import the existing resources instead.
 
-### 4-1. 리소스 확인
+### 4-1. Check the resources
 
 ```powershell
 $p = "--profile","workout-personal"
@@ -146,23 +146,23 @@ aws lightsail get-key-pairs @p --query "keyPairs[].name" --output table
 aws lightsail get-instance-port-states @p --instance-name workout-memo-app --output table
 ```
 
-### 4-2. import 가능 여부
+### 4-2. Whether each resource can be imported
 
-| 리소스 | import | 처리 |
+| Resource | import | Handling |
 |---|---|---|
-| `aws_lightsail_instance.app` | 가능(이름) | import |
-| `aws_lightsail_static_ip.app` | 가능(이름, provider v6.8.0 이상) | import |
-| `aws_lightsail_static_ip_attachment.app` | 가능(고정 IP 이름, v6.10.0 이상) | import |
-| `aws_budgets_budget.monthly` | 가능(`계정ID:이름`) | import |
-| `aws_lightsail_key_pair.deploy` | 불가 | 콘솔에서 기존 키 쌍을 지우고 apply로 새로 만듦 |
-| `aws_lightsail_instance_public_ports.app` | 불가 | apply가 같은 규칙을 덮어씀 |
-| `terraform_data.account_guard` | 해당 없음 | apply가 새로 만듦(AWS에는 만들지 않음) |
-| `aws_s3_bucket.backups`와 버킷 설정 5개 | 가능(버킷 이름) | import. 버킷을 지우면 사본도 사라지므로 새로 만들지 않음 |
-| `aws_iam_user.*`, `aws_iam_user_policy.*` | 가능(사용자 이름, `사용자:정책 이름`) | import |
+| `aws_lightsail_instance.app` | Possible (name) | import |
+| `aws_lightsail_static_ip.app` | Possible (name, provider v6.8.0 or later) | import |
+| `aws_lightsail_static_ip_attachment.app` | Possible (static IP name, v6.10.0 or later) | import |
+| `aws_budgets_budget.monthly` | Possible (`account ID:name`) | import |
+| `aws_lightsail_key_pair.deploy` | Not possible | Delete the existing key pair in the console and create a new one with apply |
+| `aws_lightsail_instance_public_ports.app` | Not possible | apply overwrites it with the same rules |
+| `terraform_data.account_guard` | Not applicable | apply creates it anew (nothing is created in AWS) |
+| `aws_s3_bucket.backups` and its 5 bucket settings | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the copies |
+| `aws_iam_user.*`, `aws_iam_user_policy.*` | Possible (user name, `user:policy name`) | import |
 
-### 4-3. 절차
+### 4-3. Procedure
 
-1. 커밋하지 않을 import 파일을 만들고, 이 clone에서만 git이 무시하게 합니다.
+1. Create an import file that you will not commit, and make git ignore it in this clone only.
    ```powershell
    Add-Content .git\info\exclude "imports.local.tf"
    ```
@@ -185,73 +185,73 @@ aws lightsail get-instance-port-states @p --instance-name workout-memo-app --out
      id = "${var.expected_account_id}:${var.project}-monthly"
    }
    ```
-2. `terraform init`, `terraform plan "-out=import.tfplan"`. 기대 결과는 `4 to import, 3 to add, 0 to change, 0 to destroy`입니다. 다르면 apply하지 않습니다.
-3. Lightsail 콘솔 → 계정 → SSH 키에서 서울 리전의 `workout-memo-deploy`를 삭제합니다. 실행 중인 인스턴스는 영향을 받지 않습니다.
-4. `terraform apply import.tfplan` 뒤 `terraform plan`이 "No changes"인지 확인합니다.
-5. `imports.local.tf`, `import.tfplan`을 지우고 3장대로 state를 백업합니다.
-6. 새 SSH 키는 서버에 아직 없습니다. 5장으로 서버 `authorized_keys`에 추가합니다.
+2. Run `terraform init` and `terraform plan "-out=import.tfplan"`. The expected result is `4 to import, 3 to add, 0 to change, 0 to destroy`. If it differs, do not apply.
+3. In the Lightsail console, go to Account → SSH keys and delete `workout-memo-deploy` in the Seoul region. The running instance is not affected.
+4. After `terraform apply import.tfplan`, check that `terraform plan` shows "No changes".
+5. Delete `imports.local.tf` and `import.tfplan`, and back up the state as in section 3.
+6. The new SSH key is not on the server yet. Add it to the server's `authorized_keys` with section 5.
 
-## 5. 새 PC의 SSH 키를 서버에 추가하기
+## 5. Add a new PC's SSH key to the server
 
-기존 키로 접속할 수 있으면 그 PC에서 `authorized_keys`에 추가합니다. 기존 키를 잃었으면 Lightsail 브라우저 SSH를 잠깐 허용해서 추가합니다.
+If you can connect with an existing key, add it to `authorized_keys` from that PC. If you lost the existing key, briefly allow Lightsail browser SSH and add it that way.
 
-1. 콘솔 → 인스턴스 → Networking → SSH(22) 규칙 편집 → **Allow Lightsail browser SSH** 체크 → Save.
-2. Connect 탭 → Connect using SSH에서 실행합니다(`>>` 두 개).
+1. Console → Instance → Networking → edit the SSH (22) rule → check **Allow Lightsail browser SSH** → Save.
+2. Run this from the Connect tab, Connect using SSH (two `>` characters):
    ```bash
-   echo '<새 공개키 한 줄>' >> ~/.ssh/authorized_keys
+   echo '<new public key, one line>' >> ~/.ssh/authorized_keys
    tail -n 2 ~/.ssh/authorized_keys
    ```
-3. 다시 SSH 규칙 편집 → **Allow Lightsail browser SSH** 체크 해제 → Save. 이 설정은 Terraform plan에 나오지 않으므로 직접 확인합니다.
+3. Edit the SSH rule again → uncheck **Allow Lightsail browser SSH** → Save. This setting does not show up in the Terraform plan, so check it yourself.
    ```powershell
-   aws lightsail get-instance-port-states --profile workout-personal --instance-name workout-memo-app --query "portStates[].{port:fromPort,aliases:join(',',cidrListAliases)}" --output table   # aliases가 비어 있어야 함
+   aws lightsail get-instance-port-states --profile workout-personal --instance-name workout-memo-app --query "portStates[].{port:fromPort,aliases:join(',',cidrListAliases)}" --output table   # aliases must be empty
    ```
-4. 처음 접속할 때 나오는 서버 지문을 AWS 값과 비교한 뒤 `yes`로 답합니다.
+4. On the first connection, compare the server fingerprint it shows with the AWS value, then answer `yes`.
    ```powershell
    aws lightsail get-instance-access-details --profile workout-personal --instance-name workout-memo-app --protocol ssh --query "accessDetails.hostKeys[].{alg:algorithm,sha256:fingerprintSHA256}" --output table
    ssh -i "$HOME\.ssh\workout-memo-lightsail" ubuntu@<static_ip> "hostname; uptime"
    ```
 
-## 6. 접속
+## 6. Connecting
 
-- **브라우저**: `http://<static_ip>`. 허용 IP에서만 열립니다.
+- **Browser**: `http://<static_ip>`. It opens only from the allowed IPs.
 - **SSH**: `ssh -i ~/.ssh/workout-memo-lightsail ubuntu@<static_ip>`
-- **SSH 터널**(전송 암호화): `ssh -i ~/.ssh/workout-memo-lightsail -L 8101:127.0.0.1:80 ubuntu@<static_ip>`를 실행한 뒤 `http://localhost:8101`로 접속합니다.
+- **SSH tunnel** (encrypted transport): run `ssh -i ~/.ssh/workout-memo-lightsail -L 8101:127.0.0.1:80 ubuntu@<static_ip>`, then open `http://localhost:8101`.
 
-## 7. 허용 IP 바꾸기
+## 7. Change the allowed IPs
 
-`terraform.tfvars`의 `allowed_cidrs`에 추가·삭제한 뒤 plan과 apply를 실행합니다. 방화벽 규칙만 바뀌고 인스턴스는 그대로입니다. 전체 공개(`/0`)는 변수 검증에서 거부됩니다.
+Add or remove entries in `allowed_cidrs` in `terraform.tfvars`, then run plan and apply. Only the firewall rules change, and the instance stays as it is. Opening to everyone (`/0`) is rejected by variable validation.
 
-## 8. 알람(선택)
+## 8. Alarms (optional)
 
-Terraform AWS provider에는 Lightsail 지표 알람 리소스가 없습니다. 필요하면 CLI로 만듭니다. 알람당 월 약 $0.10이며, 이메일 연락처는 AWS 확인 메일을 승인해야 동작합니다.
+The Terraform AWS provider has no resource for Lightsail metric alarms. Create them with the CLI if you need them. Each alarm costs about $0.10 a month, and an email contact works only after you approve the AWS confirmation email.
 
 ```powershell
-aws lightsail create-contact-method --profile workout-personal --protocol Email --contact-endpoint <이메일>
+aws lightsail create-contact-method --profile workout-personal --protocol Email --contact-endpoint <email>
 aws lightsail put-alarm --profile workout-personal --alarm-name workout-memo-status --monitored-resource-name workout-memo-app --metric-name StatusCheckFailed --comparison-operator GreaterThanOrEqualToThreshold --threshold 1 --evaluation-periods 2 --notification-enabled --contact-protocols Email
 ```
 
-## 9. 철거
+## 9. Teardown
 
-`terraform destroy`를 실행하면 인스턴스·고정 IP·방화벽·예산이 삭제되고, 서버 안의 DB와 덤프도 함께 사라집니다. 필요한 백업을 먼저 PC로 가져옵니다(앱 리포 문서). 자동 스냅샷은 인스턴스 삭제 후에도 남아 비용이 나올 수 있으므로 Lightsail 콘솔에서 확인합니다.
+Running `terraform destroy` deletes the instance, static IP, firewall, and budget, and the DB and dumps inside the server go with them. Bring the backups you need to your PC first (the app repo doc). Automatic snapshots can remain after the instance is deleted and may keep costing money, so check them in the Lightsail console.
 
-## 10. 서버 키 만들기 (#7, #8)
+## 10. Creating the server keys (#7, #8)
 
-서버에는 IAM 역할을 붙일 수 없어서, 서버가 AWS를 쓰려면 액세스 키가 필요합니다. 키는 Terraform으로 만들지 않습니다(비밀 키가 state에 남지 않게). apply 뒤에 콘솔에서 만듭니다.
+You cannot attach an IAM role to the server, so the server needs access keys to use AWS. Terraform does not create the keys (so that no secret key stays in the state). Create them in the console after apply.
 
-두 사용자는 서버의 모든 앱이 같이 쓰므로 특정 앱 이름이 아니라 `sirloinbh-apps-*`로 만듭니다(project-standards ADR-0010). 2026-10-29 처음에는 `workout-memo-*`로 만들었고, 같은 날 이름만 바꿨습니다(`iam:UpdateUser`, plan `2 to add, 2 to change, 2 to destroy`: 사용자는 제자리에서 이름 변경, 인라인 정책은 다시 붙임). 이름을 바꾸는 동안에는 1-2 `ServerUsers`의 `Resource`에 예전 이름과 새 이름이 모두 있어야 합니다.
+All apps on the server share the two users, so they are named `sirloinbh-apps-*`, not after a specific app (project-standards ADR-0010). On 2026-10-29 they were first created as `workout-memo-*` and renamed the same day (`iam:UpdateUser`, plan `2 to add, 2 to change, 2 to destroy`: the users are renamed in place and the inline policies are attached again). While renaming, the `Resource` of `ServerUsers` in 1-2 must contain both the old and the new names.
 
-| IAM 사용자 (`terraform output`) | 할 수 있는 일 | 서버 공용 파일 `/opt/project-standards/.env`의 키 |
+| IAM user (`terraform output`) | What it can do | Keys in the server's shared file `/opt/project-standards/.env` |
 |---|---|---|
-| `sirloinbh-apps-backup-uploader` | 백업 버킷에 파일 올리기만 (읽기·목록·삭제 불가) | `BACKUP_S3_BUCKET`(= `backup_bucket` 출력값), `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY` |
-| `sirloinbh-apps-secrets-reader` | SSM `/sirloinbh/anthropic-api-key` 하나 읽기만 | `SECRETS_AWS_ACCESS_KEY_ID`, `SECRETS_AWS_SECRET_ACCESS_KEY` (Claude API를 쓰는 앱이 읽음, 지금은 study-log) |
+| `sirloinbh-apps-backup-uploader` | Only upload files to the backup bucket (no read, list, or delete) | `BACKUP_S3_BUCKET` (= the `backup_bucket` output value), `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY` |
+| `sirloinbh-apps-secrets-reader` | Only read the one SSM parameter `/sirloinbh/anthropic-api-key` | `SECRETS_AWS_ACCESS_KEY_ID`, `SECRETS_AWS_SECRET_ACCESS_KEY` (read by the apps that use the Claude API, for now study-log) |
 
-1. 콘솔 → IAM → 사용자 → 위 사용자 → 보안 자격 증명 → 액세스 키 만들기 → 사용 사례 "AWS 외부에서 실행되는 애플리케이션". 설명 태그에 "lightsail-server"라고 적습니다.
-2. 서버에 접속해 공용 파일 `/opt/project-standards/.env` 한 곳에 위 키를 넣습니다. 앱마다 넣지 않습니다. 값은 서버에서만 입력하고 채팅·문서에 남기지 않습니다. 파일은 처음 한 번 만듭니다:
+1. Console → IAM → Users → the user above → Security credentials → Create access key → use case "Application running outside AWS". Write "lightsail-server" in the description tag.
+2. Connect to the server and put the keys above in one place, the shared file `/opt/project-standards/.env`. Do not put them in each app. Type the values only on the server and do not leave them in chat or docs. Create the file once:
    ```bash
    sudo install -d -o ubuntu -g ubuntu -m 700 /opt/project-standards
    install -m 600 /dev/null /opt/project-standards/.env
    ```
-   앱의 배포 스크립트가 이 파일을 읽으려면 project-standards#266의 동기화 PR이 그 앱에 병합되어 있어야 합니다.
-3. 백업: `sudo bash /opt/<앱>/deploy/install-backup.sh` 뒤 `bash /opt/<앱>/deploy/backup.sh dump`를 실행해 "uploaded ... to s3://..."가 나오는지 봅니다.
-4. Claude 키: PC에서 `node tools/app-secrets.mjs set`(project-standards)으로 SSM 파라미터를 만든 뒤, 서버에서 `bash /opt/study-log/deploy/ssm-get.sh /sirloinbh/anthropic-api-key > /dev/null && echo ok`가 `ok`인지 봅니다(값은 출력하지 않음).
-5. 키를 바꿀 때는 새 키를 만들어 `.env`를 고친 뒤 예전 키를 비활성화·삭제합니다. 서버 키가 유출되면 이 사용자의 키를 지우고, Claude API 키도 함께 교체합니다.
+   For an app's deploy script to read this file, the sync PR from project-standards#266 must be merged into that app.
+3. Backup: run `sudo bash /opt/<app>/deploy/install-backup.sh`, then `bash /opt/<app>/deploy/backup.sh dump`, and check that "uploaded ... to s3://..." appears.
+4. Claude key: create the SSM parameter from your PC with `node tools/app-secrets.mjs set` (project-standards), then check on the server that `bash /opt/study-log/deploy/ssm-get.sh /sirloinbh/anthropic-api-key > /dev/null && echo ok` prints `ok` (the value is not printed).
+5. To change a key, create a new key, fix `.env`, then deactivate and delete the old key. If a server key leaks, delete this user's keys and replace the Claude API key too.
