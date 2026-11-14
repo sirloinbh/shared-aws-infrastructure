@@ -40,7 +40,7 @@ winget install --id Amazon.AWSCLI --exact
 Create an IAM user only for Terraform and use that user's access key.
 
 1. Sign in to the console as the root account, then go to IAM → Users → Create user. Example name: `terraform-workout`. Do not give console access.
-2. Permissions tab → Add permissions → Create inline policy → JSON (if you already created the user, replace the existing inline policy with this content. `BackupBucket` and `ServerUsers` were added in #7 and #8, `Route53Read` and `Route53Records` in #33):
+2. Permissions tab → Add permissions → Create inline policy → JSON (if you already created the user, replace the existing inline policy with this content. `BackupBucket` and `ServerUsers` were added in #7 and #8):
    ```json
    {
      "Version": "2012-10-17",
@@ -63,6 +63,23 @@ Create an IAM user only for Terraform and use that user's access key.
          "Resource": "arn:aws:iam::*:user/sirloinbh-apps-*"
        },
        {
+         "Sid": "Budgets",
+         "Effect": "Allow",
+         "Action": [
+           "budgets:ViewBudget", "budgets:ModifyBudget",
+           "budgets:ListTagsForResource", "budgets:TagResource", "budgets:UntagResource"
+         ],
+         "Resource": "*"
+       }
+     ]
+   }
+   ```
+3. Route 53 (#33): IAM → Policies → Create policy → JSON, name it `terraform-route53-dns`, then on the user: Add permissions → Attach policies directly → that policy. It is a managed policy because all inline policies of one user share a 2,048-character limit, which the policy above nearly fills.
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
          "Sid": "Route53Read",
          "Effect": "Allow",
          "Action": [
@@ -76,21 +93,12 @@ Create an IAM user only for Terraform and use that user's access key.
          "Effect": "Allow",
          "Action": "route53:ChangeResourceRecordSets",
          "Resource": "arn:aws:route53:::hostedzone/*"
-       },
-       {
-         "Sid": "Budgets",
-         "Effect": "Allow",
-         "Action": [
-           "budgets:ViewBudget", "budgets:ModifyBudget",
-           "budgets:ListTagsForResource", "budgets:TagResource", "budgets:UntagResource"
-         ],
-         "Resource": "*"
        }
      ]
    }
    ```
-3. Security credentials tab → Create access key → use case "Command Line Interface (CLI)". In the description tag, write which PC it is for.
-4. Register it under a name so it does not mix with the company profile, and check the account.
+4. Security credentials tab → Create access key → use case "Command Line Interface (CLI)". In the description tag, write which PC it is for.
+5. Register it under a name so it does not mix with the company profile, and check the account.
    ```powershell
    aws configure --profile workout-personal       # region ap-northeast-2
    aws sts get-caller-identity --profile workout-personal
