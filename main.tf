@@ -60,7 +60,9 @@ resource "aws_lightsail_static_ip_attachment" "app" {
   instance_name  = aws_lightsail_instance.app.name
 }
 
-# Replaces the default firewall: only SSH and HTTP, only from the allow list.
+# Replaces the default firewall: only SSH, HTTP, and HTTPS, only from the allow list.
+# 443 is the app subdomains through the server nginx (#33). The certificate uses DNS validation,
+# so 80 never has to be open to everyone.
 resource "aws_lightsail_instance_public_ports" "app" {
   instance_name = aws_lightsail_instance.app.name
   port_info {
@@ -73,6 +75,12 @@ resource "aws_lightsail_instance_public_ports" "app" {
     protocol  = "tcp"
     from_port = 80
     to_port   = 80
+    cidrs     = var.allowed_cidrs
+  }
+  port_info {
+    protocol  = "tcp"
+    from_port = 443
+    to_port   = 443
     cidrs     = var.allowed_cidrs
   }
 }

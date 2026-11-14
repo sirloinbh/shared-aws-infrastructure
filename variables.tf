@@ -25,7 +25,7 @@ variable "bundle_id" {
 }
 variable "allowed_cidrs" {
   type        = list(string)
-  description = "IPv4 CIDRs allowed to reach SSH (22) and the web (80). Add new networks here."
+  description = "IPv4 CIDRs allowed to reach SSH (22) and the web (80, 443). Add new networks here."
   validation {
     condition = length(var.allowed_cidrs) > 0 && alltrue([
       for c in var.allowed_cidrs : can(cidrhost(c, 0)) && !endswith(c, "/0")
@@ -40,6 +40,11 @@ variable "ssh_public_key_path" {
 variable "repo_url" {
   type    = string
   default = "https://github.com/sirloinbh/workout-memo.git"
+}
+variable "root_domain" {
+  type        = string
+  default     = "daysofme.com"
+  description = "Shared domain registered in Route 53 (project-standards registry rootDomain). Each app is <name>.<root_domain>."
 }
 variable "budget_emails" {
   type        = list(string)
