@@ -1,5 +1,5 @@
 {
-  "centralSha": "5a310d6f58dc6d2d229793f3981f49066f2da3f7",
+  "centralSha": "d90a6a8664894eb56910a42df12fa1f0767c9df2",
   "profile": "infra",
   "project": null,
   "files": {
@@ -20,7 +20,7 @@
     },
     ".claude/settings.json": {
       "mode": "full",
-      "sha256": "0f4fe35fd6af44bbf9b99895a7daf80a9ae4e3938f17ae02c47f62d01062b25f",
+      "sha256": "7babc0f79219971126c67980940c1e02ab6ccc794a69e93aadd19b3dc95ea976",
       "source": "templates/common/.claude/settings.json.tmpl"
     },
     ".claude/skills/std-backlog/SKILL.md": {
@@ -40,7 +40,7 @@
     },
     ".claude/skills/std-git-writing/SKILL.md": {
       "mode": "full",
-      "sha256": "5c49dc7adf06eed78b6eee5f880939b866656ddf6d5ad36499a6be0d060b7515",
+      "sha256": "ff16ff1f1ca3f5feb224ef03fba0deb81e9770b196ee5a049580db271741efe2",
       "source": "templates/common/skills/std-git-writing/SKILL.md"
     },
     ".claude/skills/std-implementation/SKILL.md": {
@@ -60,7 +60,7 @@
     },
     ".codex/rules/git-branch.rules": {
       "mode": "full",
-      "sha256": "467f15be697997711c349a4dbb89b6223e4f0cb5450c2bdfb41e859941a1bcb0",
+      "sha256": "f99871fb8c23d93187972d4fe666451950678abfd302b6134472e721b1f5fd94",
       "source": "templates/common/.codex/rules/git-branch.rules"
     },
     ".codex/rules/package-installs.rules": {
@@ -90,7 +90,7 @@
     },
     ".github/workflows/ci.yml": {
       "mode": "full",
-      "sha256": "0d95180245db3d21ad59ee643ff2e2b1af8365da17e4e73f45ef29ff25c01d75",
+      "sha256": "130a8743a323e315b9edaff4a7f6f65096ae8fe9b5b52461942c86cada85e867",
       "source": "templates/infra/.github/workflows/ci.yml.tmpl"
     },
     ".gitignore": {
@@ -165,7 +165,7 @@
     },
     "skills/std-git-writing/SKILL.md": {
       "mode": "full",
-      "sha256": "5c49dc7adf06eed78b6eee5f880939b866656ddf6d5ad36499a6be0d060b7515",
+      "sha256": "ff16ff1f1ca3f5feb224ef03fba0deb81e9770b196ee5a049580db271741efe2",
       "source": "templates/common/skills/std-git-writing/SKILL.md"
     },
     "skills/std-implementation/SKILL.md": {
