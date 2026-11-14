@@ -6,4 +6,4 @@ output "allowed_cidrs" { value = var.allowed_cidrs }
 output "backup_bucket" { value = aws_s3_bucket.backups.bucket }
 output "backup_uploader_user" { value = aws_iam_user.backup_uploader.name }
 output "secrets_reader_user" { value = aws_iam_user.secrets_reader.name }
-output "claude_key_parameter" { value = local.claude_key_parameter }
+output "secrets_reader_paths" { value = concat(["/sirloinbh/shared/*"], [for app in local.secret_apps : "/sirloinbh/${app}/*"]) }
