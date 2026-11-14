@@ -13,14 +13,14 @@ Run every command in this repo's folder. The profile name in the examples is `wo
 | Automatic snapshots | Daily at 03:00 (Seoul time), AWS keeps the latest 7, $0.05/GB-month by used size | under about $1 |
 | DB dump | Daily at 03:30 (Seoul time), kept for 14 days in `/var/backups/workout` on the server (also included in the snapshots) | $0 |
 | Off-server copy of the DB dump (#7) | S3 `sirloinbh-db-backups-<account ID>`, a daily dump and a row-count file per app, kept for 30 days (overwritten earlier versions also 30 days) | under $0.1 because the dumps are small (S3 Standard $0.025/GB-month, a few hundred upload requests a month) |
-| Reading the shared Claude API key (#8) | One SSM Parameter Store standard parameter, an IAM user | $0 |
+| Reading the app keys (#8, #27) | SSM Parameter Store standard parameters, an IAM user | $0 |
 | Logs | Docker json-file, 10MB x 3 rotation per container | $0 |
 | AWS Budgets | $10. Email at 50% and 80% of actual spend and 100% of forecasted spend | Free (a budget used only for alerts) |
 | Total | | **about $7-8** (plus 10% VAT) |
 
 - The budget alert does not stop spending. It covers the cost of the whole personal account.
 - Cost sources: [Lightsail pricing](https://aws.amazon.com/lightsail/pricing/), [Budgets pricing](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/). The actual bill follows the prices and taxes at billing time.
-- ECR and CloudWatch Logs are not used. S3 is used only for the DB dump copies. The user decided to keep an off-server copy instead of leaving a long-lived AWS key on the server (2026-10-27, project-standards#262). The server has only two keys: one that can only upload to the bucket and one that can read only the Claude key (section 10).
+- ECR and CloudWatch Logs are not used. S3 is used only for the DB dump copies. The user decided to keep an off-server copy instead of leaving a long-lived AWS key on the server (2026-10-27, project-standards#262). The server has only two keys: one that can only upload to the bucket and one that can read only the app keys in SSM (section 10).
 - There is no domain, so access is over HTTP. The IP restriction applies, but the transport is not encrypted. On public Wi-Fi, use an SSH tunnel (section 6).
 
 ## 1. One-time setup
@@ -243,7 +243,7 @@ All apps on the server share the two users, so they are named `sirloinbh-apps-*`
 | IAM user (`terraform output`) | What it can do | Keys in the server's shared file `/opt/project-standards/.env` |
 |---|---|---|
 | `sirloinbh-apps-backup-uploader` | Only upload files to the backup bucket (no read, list, or delete) | `BACKUP_S3_BUCKET` (= the `backup_bucket` output value), `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY` |
-| `sirloinbh-apps-secrets-reader` | Only read the one SSM parameter `/sirloinbh/anthropic-api-key` | `SECRETS_AWS_ACCESS_KEY_ID`, `SECRETS_AWS_SECRET_ACCESS_KEY` (read by the apps that use the Claude API, for now study-log) |
+| `sirloinbh-apps-secrets-reader` | Only read (`ssm:GetParameter`) SSM parameters under `/sirloinbh/shared/` and `/sirloinbh/<app>/` for the apps in `local.secret_apps` (project-standards ADR-0014) | `SECRETS_AWS_ACCESS_KEY_ID`, `SECRETS_AWS_SECRET_ACCESS_KEY` (read by every app whose `.env.example` tags a key with `@ssm=`, and by apps that use the Claude API) |
 
 1. Console → IAM → Users → the user above → Security credentials → Create access key → use case "Application running outside AWS". Write "lightsail-server" in the description tag.
 2. Connect to the server and put the keys above in one place, the shared file `/opt/project-standards/.env`. Do not put them in each app. Type the values only on the server and do not leave them in chat or docs. Create the file once:
@@ -253,5 +253,5 @@ All apps on the server share the two users, so they are named `sirloinbh-apps-*`
    ```
    For an app's deploy script to read this file, the sync PR from project-standards#266 must be merged into that app.
 3. Backup: run `sudo bash /opt/<app>/deploy/install-backup.sh`, then `bash /opt/<app>/deploy/backup.sh dump`, and check that "uploaded ... to s3://..." appears.
-4. Claude key: create the SSM parameter from your PC with `node tools/app-secrets.mjs set` (project-standards), then check on the server that `bash /opt/study-log/deploy/ssm-get.sh /sirloinbh/anthropic-api-key > /dev/null && echo ok` prints `ok` (the value is not printed).
-5. To change a key, create a new key, fix `.env`, then deactivate and delete the old key. If a server key leaks, delete this user's keys and replace the Claude API key too.
+4. App keys: create the SSM parameter from your PC with `node tools/app-secrets.mjs set <parameter>` (project-standards; without a parameter it stores the Claude key at `/sirloinbh/shared/anthropic-api-key`), then check on the server that `bash /opt/<app>/deploy/ssm-get.sh <parameter> > /dev/null && echo ok` prints `ok` (the value is not printed).
+5. To change a key, create a new key, fix `.env`, then deactivate and delete the old key. If a server key leaks, delete this user's keys and replace every app key in SSM too.
