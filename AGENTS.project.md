@@ -4,7 +4,7 @@ These rules apply to this repo only. The common procedure is in [AGENTS.md](AGEN
 
 ## What this repo manages
 
-- The workout-memo production server in the personal AWS account, Seoul region (`ap-northeast-2`): the Lightsail instance, the static IP and its attachment, the SSH key pair, the firewall, and the monthly budget alert. The setup and costs are in the [operations doc](docs/operations.md).
+- The workout-memo production server in the personal AWS account, Seoul region (`ap-northeast-2`): the Lightsail instance, the static IP and its attachment, the SSH key pair, the firewall, the monthly budget alert, the server IAM users, and the app subdomain A records in the Route 53 zone of `daysofme.com` (the zone itself is read, not managed). The setup and costs are in the [operations doc](docs/operations.md).
 - Resource names use the `var.project` prefix (`workout-memo-*`). When another app is added, tell them apart by prefix.
 - Each app repo manages its own deploys, rollbacks, auto-deploy, and DB backups (workout-memo `docs/deployment.md`).
 

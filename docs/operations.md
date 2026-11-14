@@ -14,14 +14,15 @@ Run every command in this repo's folder. The profile name in the examples is `wo
 | DB dump | Daily at 03:30 (Seoul time), kept for 14 days in `/var/backups/workout` on the server (also included in the snapshots) | $0 |
 | Off-server copy of the DB dump (#7) | S3 `sirloinbh-db-backups-<account ID>`, a daily dump and a row-count file per app, kept for 30 days (overwritten earlier versions also 30 days) | under $0.1 because the dumps are small (S3 Standard $0.025/GB-month, a few hundred upload requests a month) |
 | Reading the app keys (#8, #27) | SSM Parameter Store standard parameters, an IAM user | $0 |
+| App subdomains (#33) | Route 53 A records `<app>.daysofme.com` in the zone the domain registration created. The domain and the zone are billed yearly (project-standards `docs/costs.md`) | about $0.50 for the zone, queries under $0.01 |
 | Logs | Docker json-file, 10MB x 3 rotation per container | $0 |
 | AWS Budgets | $10. Email at 50% and 80% of actual spend and 100% of forecasted spend | Free (a budget used only for alerts) |
 | Total | | **about $7-8** (plus 10% VAT) |
 
 - The budget alert does not stop spending. It covers the cost of the whole personal account.
 - Cost sources: [Lightsail pricing](https://aws.amazon.com/lightsail/pricing/), [Budgets pricing](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/). The actual bill follows the prices and taxes at billing time.
-- ECR and CloudWatch Logs are not used. S3 is used only for the DB dump copies. The user decided to keep an off-server copy instead of leaving a long-lived AWS key on the server (2026-10-27, project-standards#262). The server has only two keys: one that can only upload to the bucket and one that can read only the app keys in SSM (section 10).
-- There is no domain, so access is over HTTP. The IP restriction applies, but the transport is not encrypted. On public Wi-Fi, use an SSH tunnel (section 6).
+- ECR and CloudWatch Logs are not used. S3 is used only for the DB dump copies. The user decided to keep an off-server copy instead of leaving a long-lived AWS key on the server (2026-10-27, project-standards#262). The server has three keys: one that can only upload to the bucket, one that can read only the app keys in SSM, and one that can only write the certificate challenge record (section 10).
+- Until the server reverse proxy is installed (project-standards#253), access is over HTTP on each app's web port. The IP restriction applies, but the transport is not encrypted. On public Wi-Fi, use an SSH tunnel (section 6). After that, each app is `https://<app>.daysofme.com`, still only from allowed IPs.
 
 ## 1. One-time setup
 
@@ -39,7 +40,7 @@ winget install --id Amazon.AWSCLI --exact
 Create an IAM user only for Terraform and use that user's access key.
 
 1. Sign in to the console as the root account, then go to IAM → Users → Create user. Example name: `terraform-workout`. Do not give console access.
-2. Permissions tab → Add permissions → Create inline policy → JSON (if you already created the user, replace the existing inline policy with this content. `BackupBucket` and `ServerUsers` were added in #7 and #8):
+2. Permissions tab → Add permissions → Create inline policy → JSON (if you already created the user, replace the existing inline policy with this content. `BackupBucket` and `ServerUsers` were added in #7 and #8, `Route53Read` and `Route53Records` in #33):
    ```json
    {
      "Version": "2012-10-17",
@@ -60,6 +61,21 @@ Create an IAM user only for Terraform and use that user's access key.
            "iam:ListAttachedUserPolicies", "iam:ListAccessKeys", "iam:ListGroupsForUser"
          ],
          "Resource": "arn:aws:iam::*:user/sirloinbh-apps-*"
+       },
+       {
+         "Sid": "Route53Read",
+         "Effect": "Allow",
+         "Action": [
+           "route53:ListHostedZones", "route53:GetHostedZone", "route53:ListTagsForResource",
+           "route53:ListResourceRecordSets", "route53:GetChange"
+         ],
+         "Resource": "*"
+       },
+       {
+         "Sid": "Route53Records",
+         "Effect": "Allow",
+         "Action": "route53:ChangeResourceRecordSets",
+         "Resource": "arn:aws:route53:::hostedzone/*"
        },
        {
          "Sid": "Budgets",
@@ -238,11 +254,12 @@ Running `terraform destroy` deletes the instance, static IP, firewall, and budge
 
 You cannot attach an IAM role to the server, so the server needs access keys to use AWS. Terraform does not create the keys (so that no secret key stays in the state). Create them in the console after apply.
 
-All apps on the server share the two users, so they are named `sirloinbh-apps-*`, not after a specific app (project-standards ADR-0010). On 2026-10-29 they were first created as `workout-memo-*` and renamed the same day (`iam:UpdateUser`, plan `2 to add, 2 to change, 2 to destroy`: the users are renamed in place and the inline policies are attached again). While renaming, the `Resource` of `ServerUsers` in 1-2 must contain both the old and the new names.
+All apps on the server share these users, so they are named `sirloinbh-apps-*`, not after a specific app (project-standards ADR-0010). On 2026-10-29 they were first created as `workout-memo-*` and renamed the same day (`iam:UpdateUser`, plan `2 to add, 2 to change, 2 to destroy`: the users are renamed in place and the inline policies are attached again). While renaming, the `Resource` of `ServerUsers` in 1-2 must contain both the old and the new names.
 
 | IAM user (`terraform output`) | What it can do | Keys in the server's shared file `/opt/project-standards/.env` |
 |---|---|---|
 | `sirloinbh-apps-backup-uploader` | Only upload files to the backup bucket (no read, list, or delete) | `BACKUP_S3_BUCKET` (= the `backup_bucket` output value), `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY` |
+| `sirloinbh-apps-certbot` | Only write the `_acme-challenge.<root_domain>` TXT record in the domain's hosted zone (#33, project-standards ADR-0012). It cannot change any other record | `CERTBOT_AWS_ACCESS_KEY_ID`, `CERTBOT_AWS_SECRET_ACCESS_KEY` (read by `cert.sh` of the server reverse proxy, project-standards `docs/server-proxy.md`) |
 | `sirloinbh-apps-secrets-reader` | Only read (`ssm:GetParameter`) SSM parameters under `/sirloinbh/shared/` and `/sirloinbh/<app>/` for the apps in `local.secret_apps` (project-standards ADR-0014) | `SECRETS_AWS_ACCESS_KEY_ID`, `SECRETS_AWS_SECRET_ACCESS_KEY` (read by every app whose `.env.example` tags a key with `@ssm=`, and by apps that use the Claude API) |
 
 1. Console → IAM → Users → the user above → Security credentials → Create access key → use case "Application running outside AWS". Write "lightsail-server" in the description tag.
