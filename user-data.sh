@@ -34,7 +34,8 @@ if [ ! -d "$APP/.git" ]; then git clone ${repo_url} "$APP"; fi
 # The database password is generated here and never leaves the server.
 if [ ! -f "$APP/.env" ]; then
   PASS=$(openssl rand -hex 24)
-  printf 'POSTGRES_DB=workout\nPOSTGRES_USER=workout\nPOSTGRES_PASSWORD=%s\nWEB_BIND=0.0.0.0\nWEB_PORT=80\n' "$PASS" > "$APP/.env"
+  # Only the shared proxy on this server reaches the web port (project-standards#254).
+  printf 'POSTGRES_DB=workout\nPOSTGRES_USER=workout\nPOSTGRES_PASSWORD=%s\nWEB_BIND=127.0.0.1\nWEB_PORT=8101\n' "$PASS" > "$APP/.env"
   chmod 600 "$APP/.env"
 fi
 chown -R ubuntu:ubuntu "$APP"

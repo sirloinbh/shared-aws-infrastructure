@@ -22,7 +22,7 @@ Run every command in this repo's folder. The profile name in the examples is `wo
 - The budget alert does not stop spending. It covers the cost of the whole personal account.
 - Cost sources: [Lightsail pricing](https://aws.amazon.com/lightsail/pricing/), [Budgets pricing](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/). The actual bill follows the prices and taxes at billing time.
 - ECR and CloudWatch Logs are not used. S3 is used only for the DB dump copies. The user decided to keep an off-server copy instead of leaving a long-lived AWS key on the server (2026-10-27, project-standards#262). The server has three keys: one that can only upload to the bucket, one that can read only the app keys in SSM, and one that can only write the certificate challenge record (section 10).
-- Until the server reverse proxy is installed (project-standards#253), access is over HTTP on each app's web port. The IP restriction applies, but the transport is not encrypted. On public Wi-Fi, use an SSH tunnel (section 6). After that, each app is `https://<app>.daysofme.com`, still only from allowed IPs.
+- Each app is `https://<app>.daysofme.com`, only from allowed IPs. The shared reverse proxy on the server (project-standards#253) takes 80 and 443 and forwards each name to the app's web port on `127.0.0.1`, which is not open in the firewall.
 
 ## 1. One-time setup
 
@@ -239,7 +239,7 @@ If you can connect with an existing key, add it to `authorized_keys` from that P
 
 - **Browser**: `http://<static_ip>`. It opens only from the allowed IPs.
 - **SSH**: `ssh -i ~/.ssh/workout-memo-lightsail ubuntu@<static_ip>`
-- **SSH tunnel** (encrypted transport): run `ssh -i ~/.ssh/workout-memo-lightsail -L 8101:127.0.0.1:80 ubuntu@<static_ip>`, then open `http://localhost:8101`.
+- **SSH tunnel** (encrypted transport): run `ssh -i ~/.ssh/workout-memo-lightsail -L 8101:127.0.0.1:8101 ubuntu@<static_ip>`, then open `http://localhost:8101`. Use it when the shared proxy (`https://workout-memo.daysofme.com`) is down.
 
 ## 7. Change the allowed IPs
 
