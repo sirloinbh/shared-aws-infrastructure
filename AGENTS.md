@@ -9,7 +9,11 @@ Follow std-backlog to split requirements into issues and to choose the next task
 1. Register an issue in `sirloinbh/shared-aws-infrastructure`. If the user named an existing issue, reuse it.
 2. Create a work branch that contains the issue number: `<type>/<issue-number>-<slug>`.
 3. Run the verification commands below before committing and before creating or updating a PR, and record the results in the PR.
-4. **Only the user merges PRs.** The agent does not merge, enable auto-merge, or approve in place of a merge.
+4. **The agent reviews and merges its own PRs** (user decision, 2026-11-15, #46).
+   - Review the PR with std-code-review 1–2 times, fixing findings on the same branch, until no blocking finding remains.
+   - If a review finds a big problem outside the PR's scope, register it as a new issue (std-backlog) instead of growing the PR.
+   - When the review passes and CI is green, merge with `pr merge --merge` (no `--delete-branch`, no squash), then clean up the local branch as in std-git-writing.
+   - Do not merge, and ask the user, when "Check before merging" has an item that needs the user's decision. Merging is not applying: real AWS changes still follow "plan and apply" in [AGENTS.project.md](AGENTS.project.md).
 
 Answering questions, giving recommendations, and read-only investigation do not create an issue or a branch.
 
