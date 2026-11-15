@@ -5,8 +5,9 @@
 # in project-standards creates and replaces them. App deploy scripts read the keys their
 # .env.example tags with @ssm= (deploy/ssm-get.sh).
 locals {
-  # Apps whose own keys the server may read. Add an app here when it gets its first own key.
-  secret_apps          = ["workout-memo", "study-log", "health-log", "life-journal", "money-ledger", "cert-manager", "plan-routine", "dev-career-portfolio"]
+  # Apps and shared services whose own keys the server may read. Add one here when it gets its
+  # first own key. shared-auth is the shared sign-in (project-standards ADR-0015, #550).
+  secret_apps          = ["workout-memo", "study-log", "health-log", "life-journal", "money-ledger", "cert-manager", "plan-routine", "dev-career-portfolio", "shared-auth"]
   parameter_arn_prefix = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/sirloinbh"
   secret_parameter_arns = concat(
     ["${local.parameter_arn_prefix}/shared/*"],

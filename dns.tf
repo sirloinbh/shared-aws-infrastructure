@@ -24,6 +24,18 @@ resource "aws_route53_record" "apps" {
   depends_on = [terraform_data.account_guard]
 }
 
+# Shared services under their own subdomain (registry sharedServices in project-standards):
+# auth is the shared sign-in, sirloinbh/shared-auth (ADR-0015).
+resource "aws_route53_record" "services" {
+  for_each   = toset(["auth"])
+  zone_id    = data.aws_route53_zone.root.zone_id
+  name       = "${each.key}.${var.root_domain}"
+  type       = "A"
+  ttl        = 300
+  records    = [aws_lightsail_static_ip.app.ip_address]
+  depends_on = [terraform_data.account_guard]
+}
+
 # certbot on the server renews the wildcard certificate with DNS validation (certbot dns-route53).
 # Its key can only write the one TXT record Let's Encrypt checks. The access key is made in the
 # console (docs/operations.md section 10).
