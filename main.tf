@@ -28,7 +28,7 @@ resource "aws_lightsail_key_pair" "deploy" {
 }
 
 resource "aws_lightsail_instance" "app" {
-  name              = "${var.project}-app"
+  name              = coalesce(var.instance_name, "${var.project}-app")
   availability_zone = "${var.region}a"
   blueprint_id      = "ubuntu_24_04"
   bundle_id         = var.bundle_id
