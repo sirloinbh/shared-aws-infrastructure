@@ -240,6 +240,7 @@ If you can connect with an existing key, add it to `authorized_keys` from that P
 - **Browser**: `http://<static_ip>`. It opens only from the allowed IPs.
 - **SSH**: `ssh -i ~/.ssh/workout-memo-lightsail ubuntu@<static_ip>`
 - **SSH tunnel** (encrypted transport): run `ssh -i ~/.ssh/workout-memo-lightsail -L 8101:127.0.0.1:8101 ubuntu@<static_ip>`, then open `http://localhost:8101`. Use it when the shared proxy (`https://workout-memo.daysofme.com`) is down.
+- **Do not use the Lightsail console's "Connect using SSH" (browser SSH).** It adds the `lightsail-connect` and `lightsail-connect-ipv6` ranges to port 22, which opens SSH beyond `allowed_cidrs`, and the next `terraform plan` then wants to replace the firewall. If they appear, remove them without Terraform: re-send the current rules with `aws lightsail put-instance-public-ports` and leave out `cidrListAliases`, then confirm `terraform plan` reports "No changes" (#43).
 
 ## 7. Change the allowed IPs
 
