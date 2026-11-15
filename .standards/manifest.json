@@ -1,5 +1,5 @@
 {
-  "centralSha": "65b816e25fbef5923a9f83c6af80f50d629625af",
+  "centralSha": "52de15d7155f4c2c7edb7144124dd97e5dbb4d0b",
   "profile": "infra",
   "project": null,
   "files": {
@@ -105,7 +105,7 @@
     },
     ".standards/check.mjs": {
       "mode": "full",
-      "sha256": "91ac23ba0d4e95ad4fb673d9c5b533947f048d96da2092d16f69572b49d4aa08",
+      "sha256": "94ad732bfdb58d7abb249b3c70d4675f7e71d34192a47e670990569fb39e7f35",
       "source": "scripts/standards-check.mjs"
     },
     ".standards/ioc-scan.mjs": {
