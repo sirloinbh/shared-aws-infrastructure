@@ -21,7 +21,12 @@ variable "project" {
 variable "bundle_id" {
   type        = string
   default     = "micro_3_0"
-  description = "Lightsail plan. micro_3_0 = 1 GB RAM, 40 GB SSD, IPv4, 2 TB transfer, USD 7/month."
+  description = "Lightsail plan. micro_3_0 = 1 GB RAM, 40 GB SSD, IPv4, 2 TB transfer, USD 7/month. small_3_0 = 2 GB, 60 GB, USD 12/month. Changing it here replaces the instance with a blank one; resize from a snapshot instead (docs/operations.md section 11)."
+}
+variable "instance_name" {
+  type        = string
+  default     = null
+  description = "Lightsail instance name. Defaults to <project>-app. A resize from a snapshot needs a new name (docs/operations.md section 11)."
 }
 variable "allowed_cidrs" {
   type        = list(string)

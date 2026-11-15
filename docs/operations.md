@@ -280,3 +280,24 @@ All apps on the server share these users, so they are named `sirloinbh-apps-*`, 
 3. Backup: run `sudo bash /opt/<app>/deploy/install-backup.sh`, then `bash /opt/<app>/deploy/backup.sh dump`, and check that "uploaded ... to s3://..." appears.
 4. App keys: create the SSM parameter from your PC with `node tools/app-secrets.mjs set <parameter>` (project-standards; without a parameter it stores the Claude key at `/sirloinbh/shared/anthropic-api-key`), then check on the server that `bash /opt/<app>/deploy/ssm-get.sh <parameter> > /dev/null && echo ok` prints `ok` (the value is not printed).
 5. To change a key, create a new key, fix `.env`, then deactivate and delete the old key. If a server key leaks, delete this user's keys and replace every app key in SSM too.
+
+## 11. Resize the server (from a snapshot)
+
+Lightsail cannot change a running instance's plan. Changing `bundle_id` alone makes Terraform replace the instance with a blank Ubuntu one built from `user-data.sh`, and the DB on it is lost. Resize by building a new instance from a snapshot, then point Terraform at it. Done on 2026-11-15 from 1 GB (`micro_3_0`) to 2 GB (`small_3_0`) (#38, project-standards#564).
+
+1. Back up the state: copy `terraform.tfstate*` to `~/Backups/terraform-<date>-resize/`.
+2. Snapshot: `aws lightsail create-instance-snapshot --instance-name <old> --instance-snapshot-name <old>-resize-<date>`, and wait until `get-instance-snapshot` says `available` (about 3 minutes for 1 GB). The app keeps running.
+3. New instance with a **new name** (two instances cannot share one): `aws lightsail create-instances-from-snapshot --instance-names <new> --availability-zone ap-northeast-2a --instance-snapshot-name <snapshot> --bundle-id <bundle> --key-pair-name workout-memo-deploy --ip-address-type ipv4 --add-ons 'addOnType=AutoSnapshot,autoSnapshotAddOnRequest={snapshotTimeOfDay=18:00}' --tags key=Project,value=workout-memo`.
+4. As soon as it exists, close the default firewall (it opens 22 and 80 to everyone): `aws lightsail put-instance-public-ports --instance-name <new> --port-infos file://ports.json`, with 22, 80, and 443 limited to `allowed_cidrs` (build the file from `terraform output -json allowed_cidrs`).
+5. Move the static IP: `aws lightsail attach-static-ip --static-ip-name workout-memo-ip --instance-name <new>`. It detaches from the old instance in the same call. The containers start on their own (`restart: unless-stopped`); the proxy answers 502 for about 10 seconds until they are up.
+6. Check `https://<app>.<root_domain>/api/health`, then stop the old instance (`aws lightsail stop-instance`) so its timers do not deploy, back up, or ping health checks twice.
+7. Terraform: set `instance_name = "<new>"` and `bundle_id = "<bundle>"` in `terraform.tfvars`, then
+   ```bash
+   terraform state rm aws_lightsail_instance.app aws_lightsail_static_ip_attachment.app aws_lightsail_instance_public_ports.app
+   terraform import aws_lightsail_instance.app <new>
+   terraform import aws_lightsail_static_ip_attachment.app workout-memo-ip
+   terraform plan    # must be 1 to add (the firewall rule, same values), 0 to change, 0 to destroy
+   terraform apply
+   ```
+   `aws_lightsail_instance_public_ports` cannot be imported, so apply adds it again with the same rules.
+8. After about a week without problems, delete the stopped old instance and the manual snapshot (`aws lightsail delete-instance`, `delete-instance-snapshot`). The old instance's automatic snapshots stay until deleted and cost money.
