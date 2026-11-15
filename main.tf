@@ -16,7 +16,7 @@ resource "terraform_data" "account_guard" {
   lifecycle {
     precondition {
       condition     = data.aws_caller_identity.current.account_id == var.expected_account_id
-      error_message = "현재 AWS 자격 증명의 계정이 expected_account_id와 다릅니다. aws_profile을 확인하세요."
+      error_message = "The current AWS credentials belong to an account other than expected_account_id. Check aws_profile."
     }
   }
 }

@@ -7,7 +7,7 @@ variable "expected_account_id" {
   description = "Account ID the profile must resolve to; plan fails on any other account."
   validation {
     condition     = can(regex("^[0-9]{12}$", var.expected_account_id))
-    error_message = "12자리 AWS 계정 ID를 입력하세요."
+    error_message = "Enter the 12-digit AWS account ID."
   }
 }
 variable "region" {
@@ -35,7 +35,7 @@ variable "allowed_cidrs" {
     condition = length(var.allowed_cidrs) > 0 && alltrue([
       for c in var.allowed_cidrs : can(cidrhost(c, 0)) && !endswith(c, "/0")
     ])
-    error_message = "허용 IP는 1개 이상의 IPv4 CIDR이어야 하며 전체 공개(/0)는 허용하지 않습니다."
+    error_message = "allowed_cidrs must have at least one IPv4 CIDR, and opening to everyone (/0) is not allowed."
   }
 }
 variable "ssh_public_key_path" {
