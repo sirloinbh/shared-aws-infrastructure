@@ -13,6 +13,7 @@ Run every command in this repo's folder. The profile name in the examples is `wo
 | Automatic snapshots | Daily at 03:00 (Seoul time), AWS keeps the latest 7, $0.05/GB-month by used size | under about $1 |
 | DB dump | Daily at 03:30 (Seoul time), kept for 14 days in `/var/backups/workout` on the server (also included in the snapshots) | $0 |
 | Off-server copy of the DB dump (#7) | S3 `sirloinbh-db-backups-<account ID>`, a daily dump and a row-count file per app, kept for 30 days (overwritten earlier versions also 30 days) | under $0.1 because the dumps are small (S3 Standard $0.025/GB-month, a few hundred upload requests a month) |
+| study-log files (#53) | S3 `sirloinbh-study-log-files-<account ID>`, the original PDFs and photos of exercises; deleted or overwritten files stay recoverable for 30 days | a few cents for a few hundred MB (S3 Standard $0.025/GB-month), requests under $0.01 |
 | Reading the app keys (#8, #27) | SSM Parameter Store standard parameters, an IAM user | $0 |
 | App subdomains (#33) | Route 53 A records `<app>.daysofme.com` in the zone the domain registration created. The domain and the zone are billed yearly (project-standards `docs/costs.md`) | about $0.50 for the zone, queries under $0.01 |
 | Logs | Docker json-file, 10MB x 3 rotation per container | $0 |
@@ -21,7 +22,7 @@ Run every command in this repo's folder. The profile name in the examples is `wo
 
 - The budget alert does not stop spending. It covers the cost of the whole personal account.
 - Cost sources: [Lightsail pricing](https://aws.amazon.com/lightsail/pricing/), [Budgets pricing](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/). The actual bill follows the prices and taxes at billing time.
-- ECR and CloudWatch Logs are not used. S3 is used only for the DB dump copies. The user decided to keep an off-server copy instead of leaving a long-lived AWS key on the server (2026-10-27, project-standards#262). The server has three keys: one that can only upload to the bucket, one that can read only the app keys in SSM, and one that can only write the certificate challenge record (section 10).
+- ECR and CloudWatch Logs are not used. S3 holds the DB dump copies and study-log's files. The user decided to keep an off-server copy instead of leaving a long-lived AWS key on the server (2026-10-27, project-standards#262), and to add a key for study-log's files because the server cannot use an IAM role (2026-11-17, #53). The server has four keys: one that can only upload to the backup bucket, one that can read only the app keys in SSM, one that can only write the certificate challenge record, and one that can only read, write and delete study-log's files (section 10).
 - Each app is `https://<app>.daysofme.com`, only from allowed IPs. The shared reverse proxy on the server (project-standards#253) takes 80 and 443 and forwards each name to the app's web port on `127.0.0.1`, which is not open in the firewall.
 
 ## 1. One-time setup
@@ -97,8 +98,22 @@ Create an IAM user only for Terraform and use that user's access key.
      ]
    }
    ```
-4. Security credentials tab → Create access key → use case "Command Line Interface (CLI)". In the description tag, write which PC it is for.
-5. Register it under a name so it does not mix with the company profile, and check the account.
+4. App files (#53): IAM → Policies → Create policy → JSON, name it `terraform-app-files`, then attach it to the user as in step 3. It is a separate managed policy for the same 2,048-character reason.
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Sid": "AppFileBuckets",
+         "Effect": "Allow",
+         "Action": "s3:*",
+         "Resource": ["arn:aws:s3:::sirloinbh-study-log-files-*", "arn:aws:s3:::sirloinbh-study-log-files-*/*"]
+       }
+     ]
+   }
+   ```
+5. Security credentials tab → Create access key → use case "Command Line Interface (CLI)". In the description tag, write which PC it is for.
+6. Register it under a name so it does not mix with the company profile, and check the account.
    ```powershell
    aws configure --profile workout-personal       # region ap-northeast-2
    aws sts get-caller-identity --profile workout-personal
@@ -181,7 +196,8 @@ aws lightsail get-instance-port-states @p --instance-name workout-memo-app --out
 | `aws_lightsail_key_pair.deploy` | Not possible | Delete the existing key pair in the console and create a new one with apply |
 | `aws_lightsail_instance_public_ports.app` | Not possible | apply overwrites it with the same rules |
 | `terraform_data.account_guard` | Not applicable | apply creates it anew (nothing is created in AWS) |
-| `aws_s3_bucket.backups` and its 5 bucket settings | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the copies |
+| `aws_s3_bucket.backups` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the copies |
+| `aws_s3_bucket.study_log_files` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the files |
 | `aws_iam_user.*`, `aws_iam_user_policy.*` | Possible (user name, `user:policy name`) | import |
 
 ### 4-3. Procedure
@@ -269,6 +285,7 @@ All apps on the server share these users, so they are named `sirloinbh-apps-*`, 
 |---|---|---|
 | `sirloinbh-apps-backup-uploader` | Only upload files to the backup bucket (no read, list, or delete) | `BACKUP_S3_BUCKET` (= the `backup_bucket` output value), `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY` |
 | `sirloinbh-apps-certbot` | Only write the `_acme-challenge.<root_domain>` TXT record in the domain's hosted zone (#33, project-standards ADR-0012). It cannot change any other record | `CERTBOT_AWS_ACCESS_KEY_ID`, `CERTBOT_AWS_SECRET_ACCESS_KEY` (read by `cert.sh` of the server reverse proxy, project-standards `docs/server-proxy.md`) |
+| `sirloinbh-apps-study-log-files` (#53) | Only get, put and delete objects in the study-log files bucket, and list its keys so a missing file reads as not found. It cannot change the bucket or remove earlier versions | Not in the shared file: only study-log uses it. Put `FILE_BUCKET` (= the `study_log_files_bucket` output value), `AWS_REGION=ap-northeast-2`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in study-log's server `.env` (`/opt/study-log/.env`), which its compose file passes to the API |
 | `sirloinbh-apps-secrets-reader` | Only read (`ssm:GetParameter`) SSM parameters under `/sirloinbh/shared/` and `/sirloinbh/<app>/` for the apps in `local.secret_apps` (project-standards ADR-0014) | `SECRETS_AWS_ACCESS_KEY_ID`, `SECRETS_AWS_SECRET_ACCESS_KEY` (read by every app whose `.env.example` tags a key with `@ssm=`, and by apps that use the Claude API) |
 
 1. Console → IAM → Users → the user above → Security credentials → Create access key → use case "Application running outside AWS". Write "lightsail-server" in the description tag.

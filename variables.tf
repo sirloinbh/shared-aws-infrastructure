@@ -74,3 +74,9 @@ variable "offsite_backup_days" {
   type    = number
   default = 30
 }
+
+# How long a deleted or overwritten app file stays recoverable as an earlier version (#53).
+variable "app_file_recovery_days" {
+  type    = number
+  default = 30
+}
