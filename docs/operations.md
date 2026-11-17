@@ -113,7 +113,7 @@ Create an IAM user only for Terraform and use that user's access key.
    }
    ```
 5. Security credentials tab → Create access key → use case "Command Line Interface (CLI)". In the description tag, write which PC it is for.
-5. Register it under a name so it does not mix with the company profile, and check the account.
+6. Register it under a name so it does not mix with the company profile, and check the account.
    ```powershell
    aws configure --profile workout-personal       # region ap-northeast-2
    aws sts get-caller-identity --profile workout-personal
@@ -196,8 +196,8 @@ aws lightsail get-instance-port-states @p --instance-name workout-memo-app --out
 | `aws_lightsail_key_pair.deploy` | Not possible | Delete the existing key pair in the console and create a new one with apply |
 | `aws_lightsail_instance_public_ports.app` | Not possible | apply overwrites it with the same rules |
 | `terraform_data.account_guard` | Not applicable | apply creates it anew (nothing is created in AWS) |
-| `aws_s3_bucket.backups` and its 5 bucket settings | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the copies |
-| `aws_s3_bucket.study_log_files` and its 5 bucket settings | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the files |
+| `aws_s3_bucket.backups` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the copies |
+| `aws_s3_bucket.study_log_files` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the files |
 | `aws_iam_user.*`, `aws_iam_user_policy.*` | Possible (user name, `user:policy name`) | import |
 
 ### 4-3. Procedure
