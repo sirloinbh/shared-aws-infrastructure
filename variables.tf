@@ -80,3 +80,20 @@ variable "app_file_recovery_days" {
   type    = number
   default = 30
 }
+
+# Study notes wiki (wiki.tf). SHA-256 (64 lower-case hex characters) of the Authorization header
+# the browser sends for the wiki's user name and password. docs/operations.md section 12 shows
+# how to compute it; the password itself is stored nowhere.
+variable "wiki_auth_sha256" {
+  type        = string
+  description = "SHA-256 of the HTTP basic authentication header of the wiki. Keep it in terraform.tfvars (git-ignored)."
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.wiki_auth_sha256))
+    error_message = "Enter 64 lower-case hex characters (docs/operations.md section 12)."
+  }
+}
+variable "wiki_repository" {
+  type        = string
+  default     = "sirloinbh/develop-skill"
+  description = "GitHub repository whose main-branch workflow may deploy the wiki."
+}

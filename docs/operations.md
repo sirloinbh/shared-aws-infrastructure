@@ -16,6 +16,7 @@ Run every command in this repo's folder. The profile name in the examples is `wo
 | study-log files (#53) | S3 `sirloinbh-study-log-files-<account ID>`, the original PDFs and photos of exercises; deleted or overwritten files stay recoverable for 30 days | a few cents for a few hundred MB (S3 Standard $0.025/GB-month), requests under $0.01 |
 | Reading the app keys (#8, #27) | SSM Parameter Store standard parameters, an IAM user | $0 |
 | App subdomains (#33) | Route 53 A records `<app>.daysofme.com` in the zone the domain registration created. The domain and the zone are billed yearly (project-standards `docs/costs.md`) | about $0.50 for the zone, queries under $0.01 |
+| Study notes wiki (develop-skill#30) | S3 `sirloinbh-wiki-site-<account ID>` (about 25 MB) behind CloudFront at `wiki.daysofme.com`, with a public certificate | under $0.1: CloudFront's free allowance (1 TB and 10 million requests a month) covers one reader, the certificate is free, S3 storage and about 5,000 uploads per deploy cost a few cents |
 | Logs | Docker json-file, 10MB x 3 rotation per container | $0 |
 | AWS Budgets | $10. Email at 50% and 80% of actual spend and 100% of forecasted spend | Free (a budget used only for alerts) |
 | Total | | **about $7-8** (plus 10% VAT) |
@@ -112,8 +113,52 @@ Create an IAM user only for Terraform and use that user's access key.
      ]
    }
    ```
-5. Security credentials tab → Create access key → use case "Command Line Interface (CLI)". In the description tag, write which PC it is for.
-6. Register it under a name so it does not mix with the company profile, and check the account.
+5. Study notes wiki (develop-skill#30): IAM → Policies → Create policy → JSON, name it `terraform-wiki-site`, then attach it to the user as in step 3.
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Sid": "WikiBucket",
+         "Effect": "Allow",
+         "Action": "s3:*",
+         "Resource": ["arn:aws:s3:::sirloinbh-wiki-site-*", "arn:aws:s3:::sirloinbh-wiki-site-*/*"]
+       },
+       { "Sid": "CloudFront", "Effect": "Allow", "Action": "cloudfront:*", "Resource": "*" },
+       {
+         "Sid": "Certificates",
+         "Effect": "Allow",
+         "Action": [
+           "acm:RequestCertificate", "acm:DescribeCertificate", "acm:GetCertificate", "acm:DeleteCertificate",
+           "acm:ListCertificates", "acm:ListTagsForCertificate", "acm:AddTagsToCertificate", "acm:RemoveTagsFromCertificate"
+         ],
+         "Resource": "*"
+       },
+       {
+         "Sid": "GitHubOidcProvider",
+         "Effect": "Allow",
+         "Action": [
+           "iam:CreateOpenIDConnectProvider", "iam:GetOpenIDConnectProvider", "iam:DeleteOpenIDConnectProvider",
+           "iam:TagOpenIDConnectProvider", "iam:UntagOpenIDConnectProvider", "iam:ListOpenIDConnectProviders",
+           "iam:AddClientIDToOpenIDConnectProvider", "iam:UpdateOpenIDConnectProviderThumbprint"
+         ],
+         "Resource": "*"
+       },
+       {
+         "Sid": "WikiDeployRole",
+         "Effect": "Allow",
+         "Action": [
+           "iam:CreateRole", "iam:GetRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
+           "iam:TagRole", "iam:UntagRole", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies",
+           "iam:ListInstanceProfilesForRole", "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy"
+         ],
+         "Resource": "arn:aws:iam::*:role/sirloinbh-wiki-*"
+       }
+     ]
+   }
+   ```
+6. Security credentials tab → Create access key → use case "Command Line Interface (CLI)". In the description tag, write which PC it is for.
+7. Register it under a name so it does not mix with the company profile, and check the account.
    ```powershell
    aws configure --profile workout-personal       # region ap-northeast-2
    aws sts get-caller-identity --profile workout-personal
@@ -142,6 +187,7 @@ Copy `terraform.tfvars.example` to `terraform.tfvars` and fill in the values. Th
 - `expected_account_id`: the plan fails if the credentials belong to another account.
 - `allowed_cidrs`: for example `["1.2.3.4/32"]`. Check your current public IP at `https://checkip.amazonaws.com`. If the server already exists, look at the current rules (`aws lightsail get-instance-port-states`) and match them.
 - `budget_emails`
+- `wiki_auth_sha256`: the password hash of the study notes wiki (section 12)
 
 When you create the file in PowerShell 5.1, write it as UTF-8 without BOM: `[IO.File]::WriteAllText(<path>, <content>, (New-Object Text.UTF8Encoding $false))`.
 
@@ -199,6 +245,10 @@ aws lightsail get-instance-port-states @p --instance-name workout-memo-app --out
 | `aws_s3_bucket.backups` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the copies |
 | `aws_s3_bucket.study_log_files` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the files |
 | `aws_iam_user.*`, `aws_iam_user_policy.*` | Possible (user name, `user:policy name`) | import |
+| `aws_s3_bucket.wiki` and its 5 bucket settings | Possible (bucket name) | import, or delete the bucket and let apply create it; the next deploy uploads the site again |
+| `aws_cloudfront_distribution.wiki`, `aws_cloudfront_origin_access_control.wiki`, `aws_cloudfront_function.wiki` | Possible (distribution ID, access control ID, function name) | import. A new distribution would get another address, so the DNS records would change |
+| `aws_acm_certificate.wiki`, `aws_route53_record.wiki*` | Possible (certificate ARN in us-east-1; `zone ID_name_type`) | import. `aws_acm_certificate_validation.wiki` cannot be imported; apply creates it without changing AWS |
+| `aws_iam_openid_connect_provider.github`, `aws_iam_role.wiki_deploy`, `aws_iam_role_policy.wiki_deploy` | Possible (provider ARN, role name, `role:policy name`) | import |
 
 ### 4-3. Procedure
 
@@ -319,3 +369,37 @@ Lightsail cannot change a running instance's plan. Changing `bundle_id` alone ma
    ```
    `aws_lightsail_instance_public_ports` cannot be imported, so apply adds it again with the same rules.
 8. After about a week without problems, delete the stopped old instance and the manual snapshot (`aws lightsail delete-instance`, `delete-instance-snapshot`). The old instance's automatic snapshots stay until deleted and cost money.
+
+## 12. Study notes wiki (develop-skill#30)
+
+`wiki.tf` hosts the static wiki that `sirloinbh/develop-skill` builds from its notes: a private S3 bucket, a CloudFront distribution at `https://wiki.daysofme.com/`, and a CloudFront function that asks for one user name and password. The decision and its reasons are in develop-skill `docs/wiki-site.md`. The notes repository uploads the site itself; this repo only owns the AWS resources.
+
+### 12-1. First apply
+
+1. Attach the `terraform-wiki-site` policy to the Terraform user (section 1-2, step 5).
+2. Choose a user name and a password, and compute the hash that the function compares. Run this in PowerShell on your PC; it asks for the password without showing it and prints only the hash.
+   ```powershell
+   $user = "<user name>"
+   $pass = Read-Host "Wiki password" -AsSecureString
+   $plain = [Net.NetworkCredential]::new("", $pass).Password
+   $header = "Basic " + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("${user}:$plain"))
+   -join ([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($header)) | ForEach-Object { $_.ToString("x2") })
+   ```
+   Put the printed value in `terraform.tfvars` as `wiki_auth_sha256 = "<64 characters>"`. Do not write the password anywhere; keep it in your password manager.
+3. Plan and apply as in section 2. The first plan adds 18 resources and changes or destroys none. The certificate validation and the distribution take 5 to 15 minutes.
+   - If the plan fails because the OIDC provider `token.actions.githubusercontent.com` already exists in the account, import it instead: `terraform import aws_iam_openid_connect_provider.github arn:aws:iam::<account ID>:oidc-provider/token.actions.githubusercontent.com`.
+4. Give the outputs to the notes repository as repository variables (they are not secrets; the role can be assumed only by that repository's `main` branch workflow). In the develop-skill folder, with the personal GitHub account:
+   ```powershell
+   gh variable set WIKI_DEPLOY_ROLE_ARN --repo sirloinbh/develop-skill --body (terraform -chdir=<this folder> output -raw wiki_deploy_role_arn)
+   gh variable set WIKI_BUCKET --repo sirloinbh/develop-skill --body (terraform -chdir=<this folder> output -raw wiki_bucket)
+   gh variable set WIKI_DISTRIBUTION_ID --repo sirloinbh/develop-skill --body (terraform -chdir=<this folder> output -raw wiki_distribution_id)
+   ```
+5. Run the `wiki` workflow of develop-skill once (Actions → wiki → Run workflow), then open `https://wiki.daysofme.com/` on the phone and enter the user name and password. The browser remembers them.
+
+### 12-2. Operations
+
+- **Change the password**: compute a new hash (step 2), replace `wiki_auth_sha256`, plan, and apply. Only the function changes (`0 to add, 1 to change`), and the new password works within about a minute.
+- **How it stays private**: the function runs before the cache on every request, so a cached page is never served without the password. The bucket blocks public access and lets only this distribution read it.
+- **Limits**: basic authentication has no lockout, so use a long random password. The hash is in the function code and in the state; someone who can read them can test password guesses offline.
+- **A page shows old content**: the deploy workflow clears the CloudFront cache at the end. To do it by hand: `aws cloudfront create-invalidation --profile workout-personal --distribution-id <wiki_distribution_id> --paths "/*"`.
+- **Teardown**: `terraform destroy` fails while the bucket has files. Empty it first: `aws s3 rm s3://<wiki_bucket> --recursive --profile workout-personal`.

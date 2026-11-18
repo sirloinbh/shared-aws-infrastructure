@@ -12,3 +12,8 @@ output "study_log_files_bucket" { value = aws_s3_bucket.study_log_files.bucket }
 output "study_log_files_user" { value = aws_iam_user.study_log_files.name }
 output "app_urls" { value = [for app in local.apps : "https://${app}.${var.root_domain}"] }
 output "secrets_reader_paths" { value = concat(["/sirloinbh/shared/*"], [for app in local.secret_apps : "/sirloinbh/${app}/*"]) }
+# Study notes wiki: the three repository variables of sirloinbh/develop-skill (docs/operations.md section 12).
+output "wiki_url" { value = "https://${local.wiki_domain}/" }
+output "wiki_bucket" { value = aws_s3_bucket.wiki.bucket }
+output "wiki_distribution_id" { value = aws_cloudfront_distribution.wiki.id }
+output "wiki_deploy_role_arn" { value = aws_iam_role.wiki_deploy.arn }
