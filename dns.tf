@@ -25,9 +25,10 @@ resource "aws_route53_record" "apps" {
 }
 
 # Shared services under their own subdomain (registry sharedServices in project-standards):
-# auth is the shared sign-in, sirloinbh/shared-auth (ADR-0015).
+# auth is the shared sign-in, sirloinbh/shared-auth (ADR-0015); ai is the AI service,
+# sirloinbh/shared-ai (ADR-0017).
 resource "aws_route53_record" "services" {
-  for_each   = toset(["auth"])
+  for_each   = toset(["auth", "ai"])
   zone_id    = data.aws_route53_zone.root.zone_id
   name       = "${each.key}.${var.root_domain}"
   type       = "A"

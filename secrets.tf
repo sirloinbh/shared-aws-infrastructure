@@ -6,8 +6,9 @@
 # .env.example tags with @ssm= (deploy/ssm-get.sh).
 locals {
   # Apps and shared services whose own keys the server may read. Add one here when it gets its
-  # first own key. shared-auth is the shared sign-in (project-standards ADR-0015, #550).
-  secret_apps          = ["workout-memo", "study-log", "health-log", "life-journal", "money-ledger", "cert-manager", "plan-routine", "dev-career-portfolio", "shared-auth"]
+  # first own key. shared-auth is the shared sign-in (project-standards ADR-0015, #550); shared-ai
+  # is the AI service with its tool signing key and Claude key (ADR-0017, ADR-0019, #611).
+  secret_apps          = ["workout-memo", "study-log", "health-log", "life-journal", "money-ledger", "cert-manager", "plan-routine", "dev-career-portfolio", "shared-auth", "shared-ai"]
   parameter_arn_prefix = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/sirloinbh"
   secret_parameter_arns = concat(
     ["${local.parameter_arn_prefix}/shared/*"],
