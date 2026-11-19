@@ -112,6 +112,21 @@ Create an IAM user only for Terraform and use that user's access key.
      ]
    }
    ```
+4b. Server address (#69): IAM → Policies → Create policy → JSON, name it `terraform-server-ip`, and attach it to the user as in step 3. It lets Terraform manage the one parameter that holds the static IP, and lets the PC read it (project-standards `server-ip` and `server-ssh`). Without it `terraform apply` of the parameter fails with AccessDenied.
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Sid": "ServerIpParameter",
+         "Effect": "Allow",
+         "Action": ["ssm:PutParameter", "ssm:GetParameter", "ssm:DeleteParameter", "ssm:AddTagsToResource", "ssm:RemoveTagsFromResource", "ssm:ListTagsForResource"],
+         "Resource": "arn:aws:ssm:ap-northeast-2:*:parameter/sirloinbh/shared/server-static-ip"
+       },
+       { "Sid": "ServerIpParameterRead", "Effect": "Allow", "Action": "ssm:DescribeParameters", "Resource": "*" }
+     ]
+   }
+   ```
 5. Security credentials tab → Create access key → use case "Command Line Interface (CLI)". In the description tag, write which PC it is for.
 6. Register it under a name so it does not mix with the company profile, and check the account.
    ```powershell
@@ -151,7 +166,7 @@ When you create the file in PowerShell 5.1, write it as UTF-8 without BOM: `[IO.
 terraform init
 terraform plan "-out=deploy.tfplan"   # the list of creates and changes, and the account check (without quotes, PowerShell splits `-out=` at the dot)
 terraform apply deploy.tfplan
-terraform output                      # static_ip, url, ssh, backup_bucket, the server IAM user names
+terraform output                      # static_ip, url, ssh, server_ip_parameter, backup_bucket, the server IAM user names
 ```
 
 - What gets created: the SSH key registration, the instance, the static IP and its attachment, the firewall (ports 22 and 80 open only to the allowed IPs), the monthly budget alert, the S3 bucket for DB dump copies, and two IAM users for the server (section 10).
@@ -252,6 +267,8 @@ If you can connect with an existing key, add it to `authorized_keys` from that P
    ```
 
 ## 6. Connecting
+
+The server's static IP is also stored in the SSM parameter `/sirloinbh/shared/server-static-ip` (a plain String, #69; `terraform output server_ip_parameter`). Tools read it from there: `aws ssm get-parameter --name /sirloinbh/shared/server-static-ip --query Parameter.Value --output text --profile workout-personal --region ap-northeast-2`. project-standards has `server-ip` and `server-ssh` for this, so nobody types the address by hand. If the address changes (a recreated static IP), `terraform apply` updates the parameter in the same run.
 
 - **Browser**: `http://<static_ip>`. It opens only from the allowed IPs.
 - **SSH**: `ssh -i ~/.ssh/workout-memo-lightsail ubuntu@<static_ip>`
