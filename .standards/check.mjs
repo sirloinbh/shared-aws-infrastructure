@@ -7,7 +7,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnvExample, ssmProblems } from './lib/env-tags.mjs';
-import { compareWorkspaceLockfile, workspaceLockfiles } from './lib/lockfiles.mjs';
 import { checkManifest, MANIFEST_PATH } from './lib/manifest.mjs';
 
 const CENTRAL = 'sirloinbh/project-standards';
@@ -77,6 +76,34 @@ export function checkComposeSecrets(text) {
   return problems;
 }
 
+// The deploy script (templates/deploy/deploy/remote-deploy.sh.tmpl) tags images by commit to roll back, reads
+// the web port from WEB_BIND/WEB_PORT, and runs migrations with the root db:migrate. Local DBs apply
+// migrations through the same runner, so compose must not also mount them into initdb (#695).
+export function checkComposeDeploy(text, { dbName = null, scripts = {} } = {}) {
+  const problems = [];
+  const name = dbName ?? '[a-z0-9_-]+';
+  for (const part of ['backend', 'frontend']) {
+    if (!new RegExp(`^\\s*image:\\s*['"]?${name}-${part}:\\$\\{IMAGE_TAG(:-[^}]*)?\\}`, 'm').test(text)) {
+      problems.push(`image ${dbName ?? '<db>'}-${part}:\${IMAGE_TAG} is missing, so the deploy script cannot roll back to the previous image`);
+    }
+  }
+  if (!/\$\{WEB_BIND(:-[^}]*)?\}:\$\{WEB_PORT(:-[^}]*)?\}:80\b/.test(text)) problems.push('the web port must be published as ${WEB_BIND}:${WEB_PORT}:80, which the deploy script sets in .env');
+  if (/docker-entrypoint-initdb\.d/.test(text)) problems.push('database/migrations must not be mounted into docker-entrypoint-initdb.d; the migration runner applies and records them');
+  if (/(?<!\$)\$POSTGRES_(USER|DB)\b/.test(text)) problems.push('the healthcheck must write $$POSTGRES_USER and $$POSTGRES_DB so the container, not compose, expands them');
+  if (!scripts['db:migrate']) problems.push('package.json has no root db:migrate script, which the deploy and CI run');
+  return problems;
+}
+
+/**
+ * Warnings for compose.yaml that do not fail the check (#875): the `api` service has no `healthcheck`, so
+ * `docker compose up -d --wait` and web's `depends_on` cannot tell when the API is ready. Returns warning strings.
+ */
+export function checkComposeWarnings(text) {
+  const api = text.match(/^ {2}api:[ \t]*\r?\n((?: {3,}.*\r?\n|[ \t]*\r?\n)*)/m);
+  if (api && !/^ {4}healthcheck:/m.test(api[1])) return ['compose.yaml: the api service has no healthcheck, so `docker compose up -d --wait` cannot tell when the API is ready. Add one on /api/health (scaffold/app/compose.yaml in project-standards has an example).'];
+  return [];
+}
+
 // API rules from docs/directory-rules.md "API". Warnings only: the apps grew different layouts
 // (routes/ modules or Routers in src/), so these look for the rules, not for one file layout.
 // sources: [{ file: 'backend/src/…', text }] without tests. Returns warning strings.
@@ -87,7 +114,7 @@ export function checkApi(sources) {
   if (!app) return warnings;
   const at = (source, index) => `${source.file}:${source.text.slice(0, index).split('\n').length}`;
   if (!sources.some((s) => /\bapp\.get\(\s*['"`]\/api\/health['"`]/.test(s.text))) warnings.push('backend/src: GET /api/health is missing. Every app has a health check API that verifies the DB connection.');
-  if (!/\bapp\.use\(\s*(errorHandler\b|\(\s*err\b)/.test(app.text)) warnings.push('backend/src/app.ts: the error middleware (app.use(errorHandler)) is missing, so errors are not returned as { error }.');
+  if (!/\bapp\.use\(\s*(errorHandler\b|createErrorHandler\(|\(\s*err\b)/.test(app.text)) warnings.push('backend/src/app.ts: the error middleware (app.use(errorHandler)) is missing, so errors are not returned as { error }.');
   const logAt = app.text.search(/\bapp\.use\(\s*requestLog\b/);
   if (logAt < 0) warnings.push('backend/src/app.ts: app.use(requestLog) is missing, so requests get no request ID or JSON log line (docs/logging.md).');
   else {
@@ -202,29 +229,10 @@ function checkPackages(packages, read, problems) {
   }
 }
 
-// CI installs from the root lockfile and the Docker builds from frontend/ and backend/ lockfiles (#303).
-function checkLockfiles(read, problems) {
-  const rootPackage = read('package.json');
-  const rootLock = read('package-lock.json');
-  if (rootPackage === null || rootLock === null) return;
-  const lock = JSON.parse(rootLock);
-  for (const workspace of workspaceLockfiles(JSON.parse(rootPackage), (rel) => read(rel) !== null)) {
-    const file = `${workspace}/package-lock.json`;
-    let differences;
-    try {
-      differences = compareWorkspaceLockfile(lock, workspace, JSON.parse(read(file)));
-    } catch (error) {
-      problems.push({ group: 'workspace lockfile', path: file, message: error.message });
-      continue;
-    }
-    if (!differences.length) continue;
-    const shown = differences.slice(0, 5).map((d) => `${d.name} ${d.workspace.join('·') || 'none'} (root ${d.root.join('·') || 'none'})`);
-    problems.push({
-      group: 'workspace lockfile',
-      path: file,
-      message: `${differences.length} package(s) differ in version from the root package-lock.json: ${shown.join(', ')}${differences.length > 5 ? ' and more' : ''}. Fix with node .standards/lockfiles.mjs --write`,
-    });
-  }
+/** Names of dependencies whose version is a ^ or ~ range; every app version must be exact (#701). */
+export function rangeVersions(pkg) {
+  return ['dependencies', 'devDependencies', 'optionalDependencies'].flatMap((section) =>
+    Object.entries(pkg[section] ?? {}).filter(([, v]) => /^[\^~]/.test(v)).map(([name, v]) => `${section}.${name} ${v}`));
 }
 
 /** Returns { problems: [{ group, path, message }], warnings: [string], manifest }. */
@@ -244,7 +252,10 @@ export function runCheck(root) {
   }
   checkPackages(manifest.packages, read, problems);
   if (manifest.registry) checkRegistry(manifest.registry, read, problems, warnings);
-  checkLockfiles(read, problems);
+  for (const file of ['package.json', 'frontend/package.json', 'backend/package.json']) {
+    const text = read(file);
+    for (const range of text === null ? [] : rangeVersions(JSON.parse(text))) problems.push({ group: 'version range', path: file, message: `${range} must be an exact version` });
+  }
   // @ssm= tags name the SSM parameter the deploy script reads for a key (ADR-0014).
   const envExample = read('.env.example');
   if (envExample !== null && manifest.project) {
@@ -257,6 +268,16 @@ export function runCheck(root) {
   const compose = read('compose.yaml');
   if (compose !== null && (manifest.files['frontend/Dockerfile'] || manifest.files['backend/Dockerfile'])) {
     for (const message of checkComposeSecrets(compose)) problems.push({ group: 'build secret', path: 'compose.yaml', message });
+  }
+  if (compose !== null && manifest.profile === 'app') {
+    let scripts = {};
+    try {
+      scripts = JSON.parse(read('package.json') ?? '{}').scripts ?? {};
+    } catch {
+      // an unreadable package.json is reported by the managed file check
+    }
+    for (const message of checkComposeDeploy(compose, { dbName: manifest.registry?.db?.name ?? null, scripts })) problems.push({ group: 'deploy contract', path: 'compose.yaml', message });
+    warnings.push(...checkComposeWarnings(compose));
   }
   return { problems, warnings, manifest };
 }
