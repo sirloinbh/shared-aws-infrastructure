@@ -309,7 +309,7 @@ aws lightsail put-alarm --profile workout-personal --alarm-name workout-memo-sta
 
 Running `terraform destroy` deletes the instance, static IP, firewall, and budget, and the DB and dumps inside the server go with them. Bring the backups you need to your PC first (the app repo doc). Automatic snapshots can remain after the instance is deleted and may keep costing money, so check them in the Lightsail console.
 
-The Terraform state bucket has `prevent_destroy` (#63), so `terraform destroy` stops with an error while it is in the configuration. Destroy the rest with `terraform destroy` after removing `state.tf` from a local copy, or target the other resources; delete the state bucket last, by hand, only when nothing is managed here any more.
+The Terraform state bucket has `prevent_destroy` (#63), so `terraform destroy` stops with an error while it is in the configuration. For a full teardown, first remove that line in a local, uncommitted copy. If the state already lives in the bucket, move it back to a local file (`terraform init -migrate-state` after removing the `backend` block) before destroying, or the destroy deletes the state it is writing to.
 
 ## 10. Creating the server keys (#7, #8)
 
