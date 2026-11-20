@@ -459,4 +459,4 @@ The Lightsail snapshot is the only recovery path for the whole server (user deci
 5. Data written after the snapshot is not on the new instance. If an app needs it, restore that app's latest off-server dump from S3 `sirloinbh-db-backups-<account ID>` with the app repo's backup restore steps.
 6. Delete the old instance and manual snapshots you no longer need after about a week, as in section 11 step 8.
 
-If no snapshot is left (for example, the account or region is lost), there is no scripted rebuild: build a server with `terraform apply`, then install each app with its own repo's deploy docs and restore the databases from the S3 dumps.
+If no snapshot is left (for example, the instance and its snapshots were deleted), there is no scripted rebuild: build a server with `terraform apply`, then install each app with its own repo's deploy docs and restore the databases from the S3 dumps.
