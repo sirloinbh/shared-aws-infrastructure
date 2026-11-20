@@ -1,0 +1,29 @@
+{
+  "generated": "Generated from registry/projects.json in sirloinbh/project-standards. Do not edit here; change the registry.",
+  "apps": [
+    "workout-memo",
+    "study-log",
+    "health-log",
+    "life-journal",
+    "money-ledger",
+    "cert-manager",
+    "plan-routine",
+    "dev-career-portfolio"
+  ],
+  "sharedServices": [
+    "auth",
+    "ai"
+  ],
+  "secretApps": [
+    "workout-memo",
+    "study-log",
+    "health-log",
+    "life-journal",
+    "money-ledger",
+    "cert-manager",
+    "plan-routine",
+    "dev-career-portfolio",
+    "shared-auth",
+    "shared-ai"
+  ]
+}
