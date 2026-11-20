@@ -1,6 +1,6 @@
 output "static_ip" { value = aws_lightsail_static_ip.app.ip_address }
-output "url" { value = "http://${aws_lightsail_static_ip.app.ip_address}" }
-output "ssh" { value = "ssh -i ~/.ssh/workout-memo-lightsail ubuntu@${aws_lightsail_static_ip.app.ip_address}" }
+# The private key sits next to the public key: the same path without ".pub".
+output "ssh" { value = "ssh -i ${trimsuffix(var.ssh_public_key_path, ".pub")} ubuntu@${aws_lightsail_static_ip.app.ip_address}" }
 output "allowed_cidrs" { value = var.allowed_cidrs }
 # Values for the server .env of each app (#7, #8). Access keys are made in the console.
 output "backup_bucket" { value = aws_s3_bucket.backups.bucket }

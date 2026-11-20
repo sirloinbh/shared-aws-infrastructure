@@ -8,19 +8,19 @@ Run every command in this repo's folder. The profile name in the examples is `wo
 
 | Item | Value | Monthly cost (before tax, estimate) |
 |---|---|---|
-| Lightsail `micro_3_0`, Seoul | 1GB RAM, 40GB SSD, public IPv4, 2TB transfer, Ubuntu 24.04 | $7.00 |
+| Lightsail `small_3_0`, Seoul (resized from `micro_3_0` on 2026-11-15, section 11) | 2GB RAM, 60GB SSD, public IPv4, 3TB transfer, Ubuntu 24.04 | $12.00 |
 | Static IP | While attached to the instance | $0 |
-| Automatic snapshots | Daily at 03:00 (Seoul time), AWS keeps the latest 7, $0.05/GB-month by used size | under about $1 |
+| Automatic snapshots | Daily at 03:00 (Seoul time), AWS keeps the latest 7, $0.05/GB-month by used size | about $1-2 |
 | DB dump | Daily at 03:30 (Seoul time), kept for 14 days in `/var/backups/workout` on the server (also included in the snapshots) | $0 |
 | Off-server copy of the DB dump (#7) | S3 `sirloinbh-db-backups-<account ID>`, a daily dump and a row-count file per app, kept for 30 days (overwritten earlier versions also 30 days) | under $0.1 because the dumps are small (S3 Standard $0.025/GB-month, a few hundred upload requests a month) |
 | study-log files (#53) | S3 `sirloinbh-study-log-files-<account ID>`, the original PDFs and photos of exercises; deleted or overwritten files stay recoverable for 30 days | a few cents for a few hundred MB (S3 Standard $0.025/GB-month), requests under $0.01 |
 | Reading the app keys (#8, #27) | SSM Parameter Store standard parameters, an IAM user | $0 |
 | App subdomains (#33) | Route 53 A records `<app>.daysofme.com` in the zone the domain registration created. The domain and the zone are billed yearly (project-standards `docs/costs.md`) | about $0.50 for the zone, queries under $0.01 |
 | Logs | Docker json-file, 10MB x 3 rotation per container | $0 |
-| AWS Budgets | $10. Email at 50% and 80% of actual spend and 100% of forecasted spend | Free (a budget used only for alerts) |
-| Total | | **about $7-8** (plus 10% VAT) |
+| AWS Budgets | `monthly_budget_usd`, default $20. Email at 50% and 80% of actual spend and 100% of forecasted spend | Free (a budget used only for alerts) |
+| Total | | **about $14-15** (plus 10% VAT, about $15-17) |
 
-- The budget alert does not stop spending. It covers the cost of the whole personal account.
+- The budget alert does not stop spending. It covers the cost of the whole personal account. Keep `monthly_budget_usd` above the monthly total with VAT, or the forecast alert fires every month; check that `terraform.tfvars` does not override it with a lower value.
 - Cost sources: [Lightsail pricing](https://aws.amazon.com/lightsail/pricing/), [Budgets pricing](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/). The actual bill follows the prices and taxes at billing time.
 - ECR and CloudWatch Logs are not used. S3 holds the DB dump copies and study-log's files. The user decided to keep an off-server copy instead of leaving a long-lived AWS key on the server (2026-10-27, project-standards#262), and to add a key for study-log's files because the server cannot use an IAM role (2026-11-17, #53). The server has four keys: one that can only upload to the backup bucket, one that can read only the app keys in SSM, one that can only write the certificate challenge record, and one that can only read, write and delete study-log's files (section 10).
 - Each app is `https://<app>.daysofme.com`, only from allowed IPs. The shared reverse proxy on the server (project-standards#253) takes 80 and 443 and forwards each name to the app's web port on `127.0.0.1`, which is not open in the firewall.
@@ -166,10 +166,10 @@ When you create the file in PowerShell 5.1, write it as UTF-8 without BOM: `[IO.
 terraform init
 terraform plan "-out=deploy.tfplan"   # the list of creates and changes, and the account check (without quotes, PowerShell splits `-out=` at the dot)
 terraform apply deploy.tfplan
-terraform output                      # static_ip, url, ssh, server_ip_parameter, backup_bucket, the server IAM user names
+terraform output                      # static_ip, ssh, app_urls, server_ip_parameter, backup_bucket, the server IAM user names
 ```
 
-- What gets created: the SSH key registration, the instance, the static IP and its attachment, the firewall (ports 22 and 80 open only to the allowed IPs), the monthly budget alert, the S3 bucket for DB dump copies, and two IAM users for the server (section 10).
+- What gets created: the SSH key registration, the instance, the static IP and its attachment, the firewall (ports 22, 80, and 443 open only to the allowed IPs), the monthly budget alert, the S3 bucket for DB dump copies, and two IAM users for the server (section 10).
 - If the plan has a replacement (`-/+`) or a deletion, do not apply. Recreating the static IP changes the public address.
 - `user-data.sh` runs on the first boot. Lightsail runs user_data with `/bin/sh`, so an sh wrapper writes and runs a bash script (`/usr/local/sbin/workout-init`). It sets up 2GB of swap, the Docker and Compose install, the app repository clone, DB password generation (the server `.env`, which never leaves the server), the backup cron, and the auto-deploy timer. It takes a few minutes.
 - `user_data` runs only on the first boot. Changing it does not recreate the existing instance (`ignore_changes`).

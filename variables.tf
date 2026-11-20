@@ -14,6 +14,8 @@ variable "region" {
   type    = string
   default = "ap-northeast-2"
 }
+# Historical name: the shared server started as workout-memo's. Do not rename it; the name is part of
+# the Lightsail instance, static IP, key pair, and budget names, so a new value replaces them.
 variable "project" {
   type    = string
   default = "workout-memo"
@@ -56,8 +58,9 @@ variable "budget_emails" {
   description = "Recipients of the monthly cost alerts. Keep them in terraform.tfvars (git-ignored)."
 }
 variable "monthly_budget_usd" {
-  type    = number
-  default = 10
+  type        = number
+  default     = 20
+  description = "Monthly alert amount for the whole account, in USD. Keep it above the real monthly cost (about USD 15-17 with VAT for the 2 GB plan, docs/operations.md), or the alerts fire every month."
 }
 # Recommended values (#73): daily snapshot at 03:00 Seoul (AWS keeps the latest 7)
 # and a nightly database dump kept 14 days on the server.
