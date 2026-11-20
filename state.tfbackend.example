@@ -1,0 +1,4 @@
+# Copy to state.tfbackend (git-ignored) and fill in, then: terraform init "-backend-config=state.tfbackend"
+# bucket: the state_bucket output (sirloinbh-terraform-state-<account ID>). profile: aws_profile in terraform.tfvars.
+bucket  = "sirloinbh-terraform-state-000000000000"
+profile = "workout-personal"

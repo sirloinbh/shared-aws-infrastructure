@@ -173,12 +173,14 @@ Copy `terraform.tfvars.example` to `terraform.tfvars` and fill in the values. Th
 - `allowed_cidrs`: for example `["1.2.3.4/32"]`. Check your current public IP at `https://checkip.amazonaws.com`. If the server already exists, look at the current rules (`aws lightsail get-instance-port-states`) and match them.
 - `budget_emails`
 
-When you create the file in PowerShell 5.1, write it as UTF-8 without BOM: `[IO.File]::WriteAllText(<path>, <content>, (New-Object Text.UTF8Encoding $false))`.
+Copy `state.tfbackend.example` to `state.tfbackend` (also excluded from git) and fill in `bucket` (the `state_bucket` output, `sirloinbh-terraform-state-<account ID>`) and `profile` (the same as `aws_profile`). `terraform init` reads it to find the remote state (section 3).
+
+When you create the files in PowerShell 5.1, write them as UTF-8 without BOM: `[IO.File]::WriteAllText(<path>, <content>, (New-Object Text.UTF8Encoding $false))`.
 
 ## 2. Apply the infrastructure
 
 ```powershell
-terraform init
+terraform init "-backend-config=state.tfbackend"
 terraform plan "-out=deploy.tfplan"   # the list of creates and changes, and the account check (without quotes, PowerShell splits `-out=` at the dot)
 terraform apply deploy.tfplan
 terraform output                      # static_ip, url, ssh, server_ip_parameter, backup_bucket, the server IAM user names
@@ -191,18 +193,63 @@ terraform output                      # static_ip, url, ssh, server_ip_parameter
 
 ## 3. State management
 
-- The S3 bucket for the state (`state_bucket` output, #63) is created by a normal apply while the state is still local. Moving the state into it is a separate step that comes with the backend change; until then the rules below apply.
-- There is no remote backend yet. The state (`terraform.tfstate`) lives only in this folder on the PC that applied, and it is excluded from git.
-- After each apply, back up the state and `terraform.tfvars` outside the repo. Avoid folders that sync to the cloud, such as OneDrive.
-  ```powershell
-  $bak = "$HOME\Backups\terraform-$(Get-Date -Format yyyyMMdd)"
-  New-Item -ItemType Directory -Force $bak | Out-Null
-  Copy-Item terraform.tfstate*, terraform.tfvars $bak
-  ```
-- To move to another PC, copy the backed-up files into this folder on the new PC and check for "No changes" with `terraform init` and `terraform plan`.
+- The state lives in the S3 bucket `sirloinbh-terraform-state-<account ID>` (`state_bucket` output) under the key `shared-aws-infrastructure/terraform.tfstate` (#63). `versions.tf` has the `backend "s3"` block; the bucket name and the profile come from the git-ignored `state.tfbackend` (1-4).
+- Every plan and apply takes a lock: a `terraform.tfstate.tflock` object next to the state (`use_lockfile`, Terraform 1.10 or later). A second run at the same time stops with "Error acquiring the state lock". Wait for the other run. Only if a run was killed and no other run is going, remove the lock with `terraform force-unlock <lock ID from the error>`.
+- Nothing has to be copied after an apply. Back up only `terraform.tfvars` and `state.tfbackend` outside the repo when you change them (they hold personal values, not the state). Avoid folders that sync to the cloud, such as OneDrive.
+- On another PC: clone the repo, put `terraform.tfvars` and `state.tfbackend` in this folder, then `terraform init "-backend-config=state.tfbackend"` and `terraform plan` must show "No changes".
 - Raising the provider version saves the state in a new format that cannot be undone. Merge the version-change PR first, then apply.
 
+### 3-1. First move from the local state (once)
+
+The bucket was created while the state was still local (#74). Do this once on the PC that has `terraform.tfstate`.
+
+1. Check the tools and rights: `terraform version` is 1.10 or later, and the Terraform user has the `terraform-state` policy (1-2 step 4c).
+2. Before pulling the backend change (main at the merge of #74, the state still local), apply the bucket if you have not yet, and read its name. If main on your PC already has the `backend "s3"` block, run this step in `git switch --detach <merge commit of #74>` and come back with `git switch main`:
+   ```powershell
+   terraform plan "-out=deploy.tfplan"   # the state bucket and its 6 settings; nothing to change or destroy
+   terraform apply deploy.tfplan
+   terraform output -raw state_bucket
+   ```
+3. Keep one last copy of the local state outside the repo, as before:
+   ```powershell
+   $bak = "$HOME\Backups\terraform-$(Get-Date -Format yyyyMMdd)-before-s3"
+   New-Item -ItemType Directory -Force $bak | Out-Null
+   Copy-Item terraform.tfstate*, terraform.tfvars $bak
+   ```
+4. Create `state.tfbackend` from the example (1-4) with the bucket name from step 2.
+5. Pull main with the backend block and move the state. Answer `yes` when Terraform asks to copy the existing state to the new backend.
+   ```powershell
+   git pull --ff-only
+   terraform init "-backend-config=state.tfbackend" -migrate-state
+   terraform plan                        # must show "No changes"
+   aws s3 ls "s3://<state_bucket>/shared-aws-infrastructure/" --profile workout-personal
+   ```
+6. Move `terraform.tfstate` and `terraform.tfstate.backup` out of this folder (the copy from step 3 stays). Terraform no longer reads them, and leaving them invites an old copy being used by mistake.
+
+If `plan` in step 5 shows changes, do not apply; the state did not move as expected. Report it before doing anything else; the step 3 copy is the state from before the move.
+
+### 3-2. Bootstrapping the bucket itself
+
+The state bucket is managed by the same configuration whose state it holds. If it ever has to be created from nothing (a new account, or after it was deleted), the backend cannot be used yet: in a local, uncommitted copy remove the `backend "s3"` block, run `terraform init -reconfigure`, apply so the bucket exists, put the block back, and move the state as in 3-1 step 5.
+
+### 3-3. Go back to an earlier state
+
+Versioning keeps every earlier state for 90 days (`state_version_days`; the newest 20 are always kept). Use this when an apply wrote a wrong state or the state object was deleted.
+
+```powershell
+$b = "<state_bucket>"; $k = "shared-aws-infrastructure/terraform.tfstate"; $p = "--profile","workout-personal"
+aws s3api list-object-versions @p --bucket $b --prefix $k --query "Versions[].{id:VersionId,time:LastModified,latest:IsLatest}" --output table
+aws s3api get-object @p --bucket $b --key $k --version-id <id> restored.tfstate
+terraform show restored.tfstate         # check it is the one you want
+terraform state push -force restored.tfstate
+terraform plan                          # compare with the real resources before any apply
+```
+
+`-force` is needed because the older copy has a lower serial. Delete `restored.tfstate` afterwards (it is git-ignored, but do not leave states lying around).
+
 ## 4. When you lose the state (recreate it with import)
+
+First try an earlier version in the bucket (3-3). Use this section only when no usable version is left. If the bucket itself is gone, recreate it first (3-2), with the import file below in the same local run.
 
 If you plan without a state, Terraform tries to create every resource anew. Do not apply as is; import the existing resources instead.
 
@@ -257,10 +304,10 @@ aws lightsail get-instance-port-states @p --instance-name workout-memo-app --out
      id = "${var.expected_account_id}:${var.project}-monthly"
    }
    ```
-2. Run `terraform init` and `terraform plan "-out=import.tfplan"`. The expected result is `4 to import, 3 to add, 0 to change, 0 to destroy`. If it differs, do not apply.
+2. Run `terraform init "-backend-config=state.tfbackend"` and `terraform plan "-out=import.tfplan"`. The expected result is `4 to import, 3 to add, 0 to change, 0 to destroy`. If it differs, do not apply.
 3. In the Lightsail console, go to Account → SSH keys and delete `workout-memo-deploy` in the Seoul region. The running instance is not affected.
 4. After `terraform apply import.tfplan`, check that `terraform plan` shows "No changes".
-5. Delete `imports.local.tf` and `import.tfplan`, and back up the state as in section 3.
+5. Delete `imports.local.tf` and `import.tfplan`.
 6. The new SSH key is not on the server yet. Add it to the server's `authorized_keys` with section 5.
 
 ## 5. Add a new PC's SSH key to the server
@@ -309,7 +356,7 @@ aws lightsail put-alarm --profile workout-personal --alarm-name workout-memo-sta
 
 Running `terraform destroy` deletes the instance, static IP, firewall, and budget, and the DB and dumps inside the server go with them. Bring the backups you need to your PC first (the app repo doc). Automatic snapshots can remain after the instance is deleted and may keep costing money, so check them in the Lightsail console.
 
-The Terraform state bucket has `prevent_destroy` (#63), so `terraform destroy` stops with an error while it is in the configuration. For a full teardown, first remove that line in a local, uncommitted copy. If the state already lives in the bucket, move it back to a local file (`terraform init -migrate-state` after removing the `backend` block) before destroying, or the destroy deletes the state it is writing to.
+The Terraform state bucket has `prevent_destroy` (#63), so `terraform destroy` stops with an error while it is in the configuration. For a full teardown, first remove that line in a local, uncommitted copy. Also move the state back to a local file first (remove the `backend` block in the same copy, then `terraform init -migrate-state`), or the destroy deletes the bucket that holds the state it is writing to.
 
 ## 10. Creating the server keys (#7, #8)
 
@@ -339,7 +386,7 @@ All apps on the server share these users, so they are named `sirloinbh-apps-*`, 
 
 Lightsail cannot change a running instance's plan. Changing `bundle_id` alone makes Terraform replace the instance with a blank Ubuntu one built from `user-data.sh`, and the DB on it is lost. Resize by building a new instance from a snapshot, then point Terraform at it. Done on 2026-11-15 from 1 GB (`micro_3_0`) to 2 GB (`small_3_0`) (#38, project-standards#564).
 
-1. Back up the state: copy `terraform.tfstate*` to `~/Backups/terraform-<date>-resize/`.
+1. Note the time. The state bucket keeps the state from before the resize, and 3-3 brings it back if a step below goes wrong.
 2. Snapshot: `aws lightsail create-instance-snapshot --instance-name <old> --instance-snapshot-name <old>-resize-<date>`, and wait until `get-instance-snapshot` says `available` (about 3 minutes for 1 GB). The app keeps running.
 3. New instance with a **new name** (two instances cannot share one): `aws lightsail create-instances-from-snapshot --instance-names <new> --availability-zone ap-northeast-2a --instance-snapshot-name <snapshot> --bundle-id <bundle> --key-pair-name workout-memo-deploy --ip-address-type ipv4 --add-ons 'addOnType=AutoSnapshot,autoSnapshotAddOnRequest={snapshotTimeOfDay=18:00}' --tags key=Project,value=workout-memo`.
 4. As soon as it exists, close the default firewall (it opens 22 and 80 to everyone): `aws lightsail put-instance-public-ports --instance-name <new> --port-infos file://ports.json`, with 22, 80, and 443 limited to `allowed_cidrs` (build the file from `terraform output -json allowed_cidrs`).
