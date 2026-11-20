@@ -11,5 +11,5 @@ output "certbot_user" { value = aws_iam_user.certbot.name }
 output "study_log_files_bucket" { value = aws_s3_bucket.study_log_files.bucket }
 output "study_log_files_user" { value = aws_iam_user.study_log_files.name }
 output "app_urls" { value = [for app in local.registry.apps : "https://${app}.${var.root_domain}"] }
-output "secrets_reader_paths" { value = concat(["/sirloinbh/shared/*"], [for app in local.secret_apps : "/sirloinbh/${app}/*"]) }
+output "secrets_reader_paths" { value = concat(["/sirloinbh/shared/*"], [for app in local.registry.secretApps : "/sirloinbh/${app}/*"]) }
 output "server_ip_parameter" { value = aws_ssm_parameter.server_static_ip.name }

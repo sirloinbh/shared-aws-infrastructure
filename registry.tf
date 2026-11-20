@@ -1,18 +1,10 @@
-# The app and shared-service names on the server (#66, #68). The DNS records (dns.tf), the SSM read
-# paths (secrets.tf) and the outputs all derive from it. apps.json is generated from
-# registry/projects.json in project-standards and arrives by the standards sync, so adding an app
-# is one registry edit; do not edit apps.json here.
+# The app and shared-service names on the server (#66, #68), used by dns.tf, secrets.tf and
+# outputs.tf. apps.json is generated from registry/projects.json in project-standards and arrives
+# by the standards sync, so adding an app is one registry edit; do not edit apps.json here.
+#   apps           every active app's registry `name`, which is also its subdomain
+#   sharedServices shared-service subdomains: auth (sirloinbh/shared-auth, ADR-0015) and
+#                  ai (sirloinbh/shared-ai, ADR-0017)
+#   secretApps     apps and shared services whose own SSM keys the server may read
 locals {
-  registry_file = jsondecode(file("${path.module}/apps.json"))
-
-  registry = {
-    # The registry `name` of every active app, which is also its subdomain.
-    apps = local.registry_file.apps
-    # Shared services (registry sharedServices) by subdomain: auth is sirloinbh/shared-auth
-    # (ADR-0015), ai is sirloinbh/shared-ai (ADR-0017).
-    services = local.registry_file.sharedServices
-  }
-
-  # Apps and shared services whose own keys the server may read (secrets.tf).
-  secret_apps = local.registry_file.secretApps
+  registry = jsondecode(file("${path.module}/apps.json"))
 }
