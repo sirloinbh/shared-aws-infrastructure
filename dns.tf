@@ -1,11 +1,6 @@
 # App subdomains under the shared domain (#33, project-standards ADR-0012): one A record per app
 # points at the server, where one nginx forwards each name to that app's web port. No wildcard
-# record, so names that are not an app do not reach the server.
-locals {
-  # The registry `name` of every active app, which is also its subdomain
-  # (registry/projects.json in project-standards). Add an app here when it is registered.
-  apps = ["workout-memo", "study-log", "health-log", "life-journal", "money-ledger", "cert-manager", "plan-routine", "dev-career-portfolio"]
-}
+# record, so names that are not an app do not reach the server. The names come from registry.tf.
 
 # The domain registration created this zone and pointed the domain's name servers at it. It is read,
 # not managed: a new zone would get other name servers, and destroying it would take the domain offline.
@@ -15,7 +10,7 @@ data "aws_route53_zone" "root" {
 }
 
 resource "aws_route53_record" "apps" {
-  for_each   = toset(local.apps)
+  for_each   = toset(local.registry.apps)
   zone_id    = data.aws_route53_zone.root.zone_id
   name       = "${each.key}.${var.root_domain}"
   type       = "A"
@@ -24,11 +19,9 @@ resource "aws_route53_record" "apps" {
   depends_on = [terraform_data.account_guard]
 }
 
-# Shared services under their own subdomain (registry sharedServices in project-standards):
-# auth is the shared sign-in, sirloinbh/shared-auth (ADR-0015); ai is the AI service,
-# sirloinbh/shared-ai (ADR-0017).
+# Shared services under their own subdomain (local.registry.services in registry.tf).
 resource "aws_route53_record" "services" {
-  for_each   = toset(["auth", "ai"])
+  for_each   = toset(local.registry.services)
   zone_id    = data.aws_route53_zone.root.zone_id
   name       = "${each.key}.${var.root_domain}"
   type       = "A"
