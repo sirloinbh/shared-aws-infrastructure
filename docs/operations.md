@@ -14,6 +14,7 @@ Run every command in this repo's folder. The profile name in the examples is `wo
 | DB dump | Daily at 03:30 (Seoul time), kept for 14 days in `/var/backups/workout` on the server (also included in the snapshots) | $0 |
 | Off-server copy of the DB dump (#7) | S3 `sirloinbh-db-backups-<account ID>`, a daily dump and a row-count file per app, kept for 30 days (overwritten earlier versions also 30 days) | under $0.1 because the dumps are small (S3 Standard $0.025/GB-month, a few hundred upload requests a month) |
 | study-log files (#53) | S3 `sirloinbh-study-log-files-<account ID>`, the original PDFs and photos of exercises; deleted or overwritten files stay recoverable for 30 days | a few cents for a few hundred MB (S3 Standard $0.025/GB-month), requests under $0.01 |
+| Terraform state (#63) | S3 `sirloinbh-terraform-state-<account ID>`, the state of this repo and its lock file; earlier versions kept 90 days (the newest 20 always) | under $0.01 (a few hundred KB, a few hundred requests a month) |
 | Reading the app keys (#8, #27) | SSM Parameter Store standard parameters, an IAM user | $0 |
 | App subdomains (#33) | Route 53 A records `<app>.daysofme.com` in the zone the domain registration created. The domain and the zone are billed yearly (project-standards `docs/costs.md`) | about $0.50 for the zone, queries under $0.01 |
 | Study notes wiki (develop-skill#30) | S3 `sirloinbh-wiki-site-<account ID>` (about 25 MB) behind CloudFront at `wiki.daysofme.com`, with a public certificate | under $0.1: CloudFront's free allowance (1 TB and 10 million requests a month) covers one reader, the certificate is free, S3 storage and about 5,000 uploads per deploy cost a few cents |
@@ -128,7 +129,21 @@ Create an IAM user only for Terraform and use that user's access key.
      ]
    }
    ```
-4c. Study notes wiki (develop-skill#30): IAM → Policies → Create policy → JSON, name it `terraform-wiki-site`, then attach it to the user as in step 3.
+4c. Terraform state (#63): IAM → Policies → Create policy → JSON, name it `terraform-state`, and attach it to the user as in step 3. It lets Terraform create the state bucket and, after the move in section 3, read and write the state and its lock file. Without it the apply of the bucket fails with AccessDenied.
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Sid": "StateBucket",
+         "Effect": "Allow",
+         "Action": "s3:*",
+         "Resource": ["arn:aws:s3:::sirloinbh-terraform-state-*", "arn:aws:s3:::sirloinbh-terraform-state-*/*"]
+       }
+     ]
+   }
+   ```
+4d. Study notes wiki (develop-skill#30): IAM → Policies → Create policy → JSON, name it `terraform-wiki-site`, then attach it to the user as in step 3.
    ```json
    {
      "Version": "2012-10-17",
@@ -215,14 +230,15 @@ terraform apply deploy.tfplan
 terraform output                      # static_ip, url, ssh, server_ip_parameter, backup_bucket, the server IAM user names
 ```
 
-- What gets created: the SSH key registration, the instance, the static IP and its attachment, the firewall (ports 22 and 80 open only to the allowed IPs), the monthly budget alert, the S3 bucket for DB dump copies, and two IAM users for the server (section 10).
+- What gets created: the SSH key registration, the instance, the static IP and its attachment, the firewall (ports 22 and 80 open only to the allowed IPs), the monthly budget alert, the S3 bucket for DB dump copies, the S3 bucket for the Terraform state (#63), and two IAM users for the server (section 10).
 - If the plan has a replacement (`-/+`) or a deletion, do not apply. Recreating the static IP changes the public address.
 - `user-data.sh` runs on the first boot. Lightsail runs user_data with `/bin/sh`, so an sh wrapper writes and runs a bash script (`/usr/local/sbin/workout-init`). It sets up 2GB of swap, the Docker and Compose install, the app repository clone, DB password generation (the server `.env`, which never leaves the server), the backup cron, and the auto-deploy timer. It takes a few minutes.
 - `user_data` runs only on the first boot. Changing it does not recreate the existing instance (`ignore_changes`).
 
 ## 3. State management
 
-- There is no remote backend (S3 or similar). The state (`terraform.tfstate`) lives only in this folder on the PC that applied, and it is excluded from git.
+- The S3 bucket for the state (`state_bucket` output, #63) is created by a normal apply while the state is still local. Moving the state into it is a separate step that comes with the backend change; until then the rules below apply.
+- There is no remote backend yet. The state (`terraform.tfstate`) lives only in this folder on the PC that applied, and it is excluded from git.
 - After each apply, back up the state and `terraform.tfvars` outside the repo. Avoid folders that sync to the cloud, such as OneDrive.
   ```powershell
   $bak = "$HOME\Backups\terraform-$(Get-Date -Format yyyyMMdd)"
@@ -259,6 +275,7 @@ aws lightsail get-instance-port-states @p --instance-name workout-memo-app --out
 | `terraform_data.account_guard` | Not applicable | apply creates it anew (nothing is created in AWS) |
 | `aws_s3_bucket.backups` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the copies |
 | `aws_s3_bucket.study_log_files` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the files |
+| `aws_s3_bucket.terraform_state` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew; it has `prevent_destroy` and holds every earlier state |
 | `aws_iam_user.*`, `aws_iam_user_policy.*` | Possible (user name, `user:policy name`) | import |
 | `aws_s3_bucket.wiki` and its 5 bucket settings | Possible (bucket name) | import, or delete the bucket and let apply create it; the next deploy uploads the site again |
 | `aws_cloudfront_distribution.wiki`, `aws_cloudfront_origin_access_control.wiki`, `aws_cloudfront_function.wiki` | Possible (distribution ID, access control ID, function name) | import. A new distribution would get another address, so the DNS records would change |
@@ -342,6 +359,8 @@ aws lightsail put-alarm --profile workout-personal --alarm-name workout-memo-sta
 
 Running `terraform destroy` deletes the instance, static IP, firewall, and budget, and the DB and dumps inside the server go with them. Bring the backups you need to your PC first (the app repo doc). Automatic snapshots can remain after the instance is deleted and may keep costing money, so check them in the Lightsail console.
 
+The Terraform state bucket has `prevent_destroy` (#63), so `terraform destroy` stops with an error while it is in the configuration. For a full teardown, first remove that line in a local, uncommitted copy. If the state already lives in the bucket, move it back to a local file (`terraform init -migrate-state` after removing the `backend` block) before destroying, or the destroy deletes the state it is writing to.
+
 ## 10. Creating the server keys (#7, #8)
 
 You cannot attach an IAM role to the server, so the server needs access keys to use AWS. Terraform does not create the keys (so that no secret key stays in the state). Create them in the console after apply.
@@ -393,7 +412,7 @@ Lightsail cannot change a running instance's plan. Changing `bundle_id` alone ma
 
 ### 12-1. First apply
 
-1. Attach the `terraform-wiki-site` policy to the Terraform user (section 1-2, step 4c).
+1. Attach the `terraform-wiki-site` policy to the Terraform user (section 1-2, step 4d).
 2. Choose a user name and a password, and compute the hash that the function compares. Run this in PowerShell on your PC; it asks for the password without showing it and prints only the hash.
    ```powershell
    $user = "<user name>"
@@ -403,7 +422,7 @@ Lightsail cannot change a running instance's plan. Changing `bundle_id` alone ma
    -join ([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($header)) | ForEach-Object { $_.ToString("x2") })
    ```
    Put the printed value in `terraform.tfvars` as `wiki_auth_sha256 = "<64 characters>"`. Do not write the password anywhere; keep it in your password manager.
-3. Plan and apply as in section 2. The first plan adds 17 resources and changes or destroys none (more if the server IP parameter of #69 is not applied yet). The certificate validation and the distribution take 5 to 15 minutes.
+3. Plan and apply as in section 2. The first plan adds 17 resources and changes or destroys none (more if earlier changes such as the server IP parameter of #69 or the state bucket of #63 are not applied yet). The certificate validation and the distribution take 5 to 15 minutes.
    - If the plan fails because the OIDC provider `token.actions.githubusercontent.com` already exists in the account, import it instead: `terraform import aws_iam_openid_connect_provider.github arn:aws:iam::<account ID>:oidc-provider/token.actions.githubusercontent.com`.
 4. Give the outputs to the notes repository as repository variables (they are not secrets; the role can be assumed only by that repository's `main` branch workflow). In the develop-skill folder, with the personal GitHub account:
    ```powershell

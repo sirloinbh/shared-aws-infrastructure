@@ -81,6 +81,12 @@ variable "app_file_recovery_days" {
   default = 30
 }
 
+# How long an earlier Terraform state version stays in the state bucket (#63).
+variable "state_version_days" {
+  type    = number
+  default = 90
+}
+
 # Study notes wiki (wiki.tf). SHA-256 (64 lower-case hex characters) of the Authorization header
 # the browser sends for the wiki's user name and password. docs/operations.md section 12 shows
 # how to compute it; the password itself is stored nowhere.

@@ -13,6 +13,8 @@ output "study_log_files_user" { value = aws_iam_user.study_log_files.name }
 output "app_urls" { value = [for app in local.registry.apps : "https://${app}.${var.root_domain}"] }
 output "secrets_reader_paths" { value = concat(["/sirloinbh/shared/*"], [for app in local.secret_apps : "/sirloinbh/${app}/*"]) }
 output "server_ip_parameter" { value = aws_ssm_parameter.server_static_ip.name }
+# The bucket name for the backend settings file (docs/operations.md section 3, #63).
+output "state_bucket" { value = aws_s3_bucket.terraform_state.bucket }
 # Study notes wiki: the three repository variables of sirloinbh/develop-skill (docs/operations.md section 12).
 output "wiki_url" { value = "https://${local.wiki_domain}/" }
 output "wiki_bucket" { value = aws_s3_bucket.wiki.bucket }
