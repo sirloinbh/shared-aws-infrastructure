@@ -34,10 +34,8 @@ resource "aws_lightsail_instance" "app" {
   bundle_id         = var.bundle_id
   key_pair_name     = aws_lightsail_key_pair.deploy.name
   ip_address_type   = "ipv4"
-  user_data = templatefile("${path.module}/user-data.sh", {
-    repo_url    = var.repo_url
-    backup_days = var.backup_retention_days
-  })
+  # Host baseline only; the snapshot is the recovery path for the whole server (#64).
+  user_data = file("${path.module}/user-data.sh")
   add_on {
     type          = "AutoSnapshot"
     snapshot_time = var.snapshot_time_utc
