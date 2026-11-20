@@ -232,7 +232,7 @@ terraform output                      # static_ip, ssh, app_urls, server_ip_para
 
 - What gets created: the SSH key registration, the instance, the static IP and its attachment, the firewall (ports 22, 80, and 443 open only to the allowed IPs), the monthly budget alert, the S3 buckets for DB dump copies and study-log files, the S3 bucket for the Terraform state (#63), the app subdomain records, and four IAM users for the server (section 10).
 - If the plan has a replacement (`-/+`) or a deletion, do not apply. Recreating the static IP changes the public address.
-- `user-data.sh` runs on the first boot. Lightsail runs user_data with `/bin/sh`, so an sh wrapper writes and runs a bash script (`/usr/local/sbin/workout-init`). It sets up 2GB of swap, the Docker and Compose install, the app repository clone, DB password generation (the server `.env`, which never leaves the server), the backup cron, and the auto-deploy timer. It takes a few minutes.
+- `user-data.sh` runs on the first boot. Lightsail runs user_data with `/bin/sh`, so an sh wrapper writes and runs a bash script (`/usr/local/sbin/server-init`). It sets up only the host baseline: the time zone, 2GB of swap, Docker and Compose, and the Docker log limits. It takes a few minutes. Apps, the proxy, certificates, the shared `.env`, and timers are not set up; a lost server comes back from a snapshot (section 13).
 - `user_data` runs only on the first boot. Changing it does not recreate the existing instance (`ignore_changes`).
 
 ## 3. State management
@@ -387,7 +387,7 @@ All apps on the server share these users, so they are named `sirloinbh-apps-*`, 
 
 ## 11. Resize the server (from a snapshot)
 
-Lightsail cannot change a running instance's plan. Changing `bundle_id` alone makes Terraform replace the instance with a blank Ubuntu one built from `user-data.sh`, and the DB on it is lost. Resize by building a new instance from a snapshot, then point Terraform at it. Done on 2026-11-15 from 1 GB (`micro_3_0`) to 2 GB (`small_3_0`) (#38, project-standards#564).
+Lightsail cannot change a running instance's plan. Changing `bundle_id` alone makes Terraform replace the instance with a new one that has only the `user-data.sh` host baseline (no apps), and the DB on it is lost. Resize by building a new instance from a snapshot, then point Terraform at it. Done on 2026-11-15 from 1 GB (`micro_3_0`) to 2 GB (`small_3_0`) (#38, project-standards#564).
 
 1. Back up the state: copy `terraform.tfstate*` to `~/Backups/terraform-<date>-resize/`.
 2. Snapshot: `aws lightsail create-instance-snapshot --instance-name <old> --instance-snapshot-name <old>-resize-<date>`, and wait until `get-instance-snapshot` says `available` (about 3 minutes for 1 GB). The app keeps running.
@@ -439,3 +439,24 @@ Lightsail cannot change a running instance's plan. Changing `bundle_id` alone ma
 - **Limits**: basic authentication has no lockout, so use a long random password. The hash is in the function code and in the state; someone who can read them can test password guesses offline.
 - **A page shows old content**: the deploy workflow clears the CloudFront cache at the end. To do it by hand: `aws cloudfront create-invalidation --profile workout-personal --distribution-id <wiki_distribution_id> --paths "/*"`.
 - **Teardown**: `terraform destroy` fails while the bucket has files. Empty it first: `aws s3 rm s3://<wiki_bucket> --recursive --profile workout-personal`.
+
+## 13. Recover the server from a snapshot (#64)
+
+The Lightsail snapshot is the only recovery path for the whole server (user decision 2026-11-21). The server holds every app, shared-auth, shared-ai, the nginx proxy, the certbot certificates, the shared `.env`, and the timers, and no repo can rebuild them all; `user-data.sh` gives a new instance only the host baseline. Use this when the instance is broken or lost. To change the plan size instead, use section 11.
+
+1. Back up the state as in section 3.
+2. Pick the snapshot. The automatic ones are daily at 03:00 Seoul, and AWS keeps the latest 7:
+   ```powershell
+   aws lightsail get-auto-snapshots --profile workout-personal --resource-name <old> --query "autoSnapshots[].{date:date,status:status}" --output table
+   ```
+   A manual snapshot (`get-instance-snapshots`) also works. Take one before any risky server change: `aws lightsail create-instance-snapshot --instance-name <old> --instance-snapshot-name <old>-<date>`.
+3. Build a new instance with a **new name** from it. From an automatic snapshot:
+   ```powershell
+   aws lightsail create-instances-from-snapshot --profile workout-personal --instance-names <new> --availability-zone ap-northeast-2a --source-instance-name <old> --restore-date <YYYY-MM-DD> --bundle-id <bundle> --key-pair-name workout-memo-deploy --ip-address-type ipv4 --add-ons 'addOnType=AutoSnapshot,autoSnapshotAddOnRequest={snapshotTimeOfDay=18:00}' --tags key=Project,value=workout-memo
+   ```
+   From a manual snapshot, use `--instance-snapshot-name <snapshot>` instead of `--source-instance-name` and `--restore-date`.
+4. Do steps 4-7 of section 11: close the default firewall, move the static IP, check `https://<app>.<root_domain>/api/health` for every app in `apps.json`, stop the old instance if it still runs, and point Terraform at the new instance (`instance_name` in `terraform.tfvars`, `state rm`, `import`, a plan with 1 to add, 0 to change, 0 to destroy).
+5. Data written after the snapshot is not on the new instance. If an app needs it, restore that app's latest off-server dump from S3 `sirloinbh-db-backups-<account ID>` with the app repo's backup restore steps.
+6. Delete the old instance and manual snapshots you no longer need after about a week, as in section 11 step 8.
+
+If no snapshot is left (for example, the instance and its snapshots were deleted), there is no scripted rebuild: build a server with `terraform apply`, then install each app with its own repo's deploy docs and restore the databases from the S3 dumps.

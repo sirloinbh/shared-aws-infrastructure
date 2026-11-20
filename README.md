@@ -9,7 +9,7 @@ The Terraform source repo for the infrastructure of the personal AWS account. It
 
 Resources still carry the `workout-memo-*` prefix (`var.project`) because the server started as workout-memo's. That name is historical; do not rename it, because a new name replaces the Lightsail instance, static IP, and key pair.
 
-`user-data.sh` initializes the server. It sets up the Docker and Compose install, 2GB of swap, the app repository clone, DB password generation, and a daily DB dump (kept for 14 days).
+`user-data.sh` sets up only the host baseline on the first boot: the time zone, 2GB of swap, Docker and Compose, and the Docker log limits. The apps, the shared proxy and certificates, the shared `.env`, and the timers are not in this repo.
 
 ```sh
 cp terraform.tfvars.example terraform.tfvars   # enter personal values; excluded from git
@@ -23,8 +23,12 @@ terraform apply deploy.tfplan
 - Terraform state and `terraform.tfvars` are not stored in git. There is no remote backend, so back them up outside the repo after each apply.
 - The budget alert is not a spending cap.
 
+## Recovery
+
+**The Lightsail snapshot is the recovery path for the whole server** (user decision 2026-11-21, #64). No script rebuilds the server from scratch: a new instance built from `user-data.sh` alone has Docker but no apps. To recover, build a new instance from the latest automatic snapshot and move the static IP to it ([operations doc](docs/operations.md) section 13). Database changes made after that snapshot come back from the off-server S3 dumps (each app repo's backup doc).
+
 ## Docs
 
-- [Infrastructure operations](docs/operations.md): setup, apply, state management and recovery after losing it, adding an SSH key, changing allowed IPs, alarms, teardown
+- [Infrastructure operations](docs/operations.md): setup, apply, state management and recovery after losing it, server recovery from a snapshot, adding an SSH key, changing allowed IPs, alarms, teardown
 - App deploys, rollbacks, auto-deploy, and DB backup restore: workout-memo `docs/deployment.md`
 - Work instructions: [AGENTS.md](AGENTS.md), [AGENTS.project.md](AGENTS.project.md)

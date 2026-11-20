@@ -44,10 +44,6 @@ variable "ssh_public_key_path" {
   type    = string
   default = "~/.ssh/workout-memo-lightsail.pub"
 }
-variable "repo_url" {
-  type    = string
-  default = "https://github.com/sirloinbh/workout-memo.git"
-}
 variable "root_domain" {
   type        = string
   default     = "daysofme.com"
@@ -62,15 +58,11 @@ variable "monthly_budget_usd" {
   default     = 20
   description = "Monthly alert amount for the whole account, in USD. Keep it above the real monthly cost (about USD 15-17 with VAT for the 2 GB plan, docs/operations.md), or the alerts fire every month."
 }
-# Recommended values (#73): daily snapshot at 03:00 Seoul (AWS keeps the latest 7)
-# and a nightly database dump kept 14 days on the server.
+# Recommended value (#73): daily snapshot at 03:00 Seoul (AWS keeps the latest 7).
+# The snapshot is the recovery path for the whole server (#64).
 variable "snapshot_time_utc" {
   type    = string
   default = "18:00"
-}
-variable "backup_retention_days" {
-  type    = number
-  default = 14
 }
 # Off-site dump copies in S3 (#7): current and overwritten versions expire after this many days.
 variable "offsite_backup_days" {
