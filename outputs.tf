@@ -15,3 +15,8 @@ output "secrets_reader_paths" { value = concat(["/sirloinbh/shared/*"], [for app
 output "server_ip_parameter" { value = aws_ssm_parameter.server_static_ip.name }
 # The bucket name for the backend settings file (docs/operations.md section 3, #63).
 output "state_bucket" { value = aws_s3_bucket.terraform_state.bucket }
+# Study notes wiki: the three repository variables of sirloinbh/develop-skill (docs/operations.md section 12).
+output "wiki_url" { value = "https://${local.wiki_domain}/" }
+output "wiki_bucket" { value = aws_s3_bucket.wiki.bucket }
+output "wiki_distribution_id" { value = aws_cloudfront_distribution.wiki.id }
+output "wiki_deploy_role_arn" { value = aws_iam_role.wiki_deploy.arn }
