@@ -187,6 +187,7 @@ terraform output                      # static_ip, url, ssh, server_ip_parameter
 ```
 
 - What gets created: the SSH key registration, the instance, the static IP and its attachment, the firewall (ports 22 and 80 open only to the allowed IPs), the monthly budget alert, the S3 bucket for DB dump copies, the S3 bucket for the Terraform state (#63), and two IAM users for the server (section 10).
+- In a new account the state bucket does not exist yet, so `terraform init` with the backend fails. Create the bucket first as in 3-2.
 - If the plan has a replacement (`-/+`) or a deletion, do not apply. Recreating the static IP changes the public address.
 - `user-data.sh` runs on the first boot. Lightsail runs user_data with `/bin/sh`, so an sh wrapper writes and runs a bash script (`/usr/local/sbin/workout-init`). It sets up 2GB of swap, the Docker and Compose install, the app repository clone, DB password generation (the server `.env`, which never leaves the server), the backup cron, and the auto-deploy timer. It takes a few minutes.
 - `user_data` runs only on the first boot. Changing it does not recreate the existing instance (`ignore_changes`).

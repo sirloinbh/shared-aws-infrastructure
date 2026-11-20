@@ -19,7 +19,7 @@ terraform apply deploy.tfplan
 
 - If the account of the current credentials differs from `expected_account_id`, the plan fails. This prevents applying with a company profile.
 - `user_data` runs only on the first boot. Changing it does not recreate the existing instance (`ignore_changes`).
-- The Terraform state lives in a versioned S3 bucket with a lock file (S3 backend, Terraform 1.10 or later). `terraform.tfvars` and `state.tfbackend` are not stored in git; back them up outside the repo when you change them.
+- The Terraform state lives in a versioned S3 bucket with a lock file (S3 backend, Terraform 1.10 or later). In a new account, create that bucket first ([operations doc](docs/operations.md) 3-2). `terraform.tfvars` and `state.tfbackend` are not stored in git; back them up outside the repo when you change them.
 - The budget alert is not a spending cap.
 
 ## Docs
