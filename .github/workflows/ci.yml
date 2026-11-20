@@ -7,9 +7,15 @@ on: [push, pull_request]
 permissions:
   contents: read
 
+# A new push to a pull request branch cancels that branch's older run. A run on main is never cancelled:
+# autodeploy treats a cancelled run of a commit as a failure, so main runs get a group of their own (#873).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   ci:
-    uses: sirloinbh/project-standards/.github/workflows/reusable-infra-ci.yml@7d2c18482250b4bda7f196e6d8174fe99ea26a47
+    uses: sirloinbh/project-standards/.github/workflows/reusable-infra-ci.yml@9594400325f502e9bd144a0f9831bf7390cee544
     with:
       terraform-version: '1.16.5'
       node-version: '24.21.0'

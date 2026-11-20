@@ -113,7 +113,22 @@ Create an IAM user only for Terraform and use that user's access key.
      ]
    }
    ```
-5. Study notes wiki (develop-skill#30): IAM → Policies → Create policy → JSON, name it `terraform-wiki-site`, then attach it to the user as in step 3.
+4b. Server address (#69): IAM → Policies → Create policy → JSON, name it `terraform-server-ip`, and attach it to the user as in step 3. It lets Terraform manage the one parameter that holds the static IP, and lets the PC read it (project-standards `server-ip` and `server-ssh`). Without it `terraform apply` of the parameter fails with AccessDenied.
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Sid": "ServerIpParameter",
+         "Effect": "Allow",
+         "Action": ["ssm:PutParameter", "ssm:GetParameter", "ssm:DeleteParameter", "ssm:AddTagsToResource", "ssm:RemoveTagsFromResource", "ssm:ListTagsForResource"],
+         "Resource": "arn:aws:ssm:ap-northeast-2:*:parameter/sirloinbh/shared/server-static-ip"
+       },
+       { "Sid": "ServerIpParameterRead", "Effect": "Allow", "Action": "ssm:DescribeParameters", "Resource": "*" }
+     ]
+   }
+   ```
+4c. Study notes wiki (develop-skill#30): IAM → Policies → Create policy → JSON, name it `terraform-wiki-site`, then attach it to the user as in step 3.
    ```json
    {
      "Version": "2012-10-17",
@@ -157,8 +172,8 @@ Create an IAM user only for Terraform and use that user's access key.
      ]
    }
    ```
-6. Security credentials tab → Create access key → use case "Command Line Interface (CLI)". In the description tag, write which PC it is for.
-7. Register it under a name so it does not mix with the company profile, and check the account.
+5. Security credentials tab → Create access key → use case "Command Line Interface (CLI)". In the description tag, write which PC it is for.
+6. Register it under a name so it does not mix with the company profile, and check the account.
    ```powershell
    aws configure --profile workout-personal       # region ap-northeast-2
    aws sts get-caller-identity --profile workout-personal
@@ -197,7 +212,7 @@ When you create the file in PowerShell 5.1, write it as UTF-8 without BOM: `[IO.
 terraform init
 terraform plan "-out=deploy.tfplan"   # the list of creates and changes, and the account check (without quotes, PowerShell splits `-out=` at the dot)
 terraform apply deploy.tfplan
-terraform output                      # static_ip, url, ssh, backup_bucket, the server IAM user names
+terraform output                      # static_ip, url, ssh, server_ip_parameter, backup_bucket, the server IAM user names
 ```
 
 - What gets created: the SSH key registration, the instance, the static IP and its attachment, the firewall (ports 22 and 80 open only to the allowed IPs), the monthly budget alert, the S3 bucket for DB dump copies, and two IAM users for the server (section 10).
@@ -303,6 +318,8 @@ If you can connect with an existing key, add it to `authorized_keys` from that P
 
 ## 6. Connecting
 
+The server's static IP is also stored in the SSM parameter `/sirloinbh/shared/server-static-ip` (a plain String, #69; `terraform output server_ip_parameter`). Tools read it from there: `aws ssm get-parameter --name /sirloinbh/shared/server-static-ip --query Parameter.Value --output text --profile workout-personal --region ap-northeast-2`. project-standards has `server-ip` and `server-ssh` for this, so nobody types the address by hand. If the address changes (a recreated static IP), `terraform apply` updates the parameter in the same run.
+
 - **Browser**: `http://<static_ip>`. It opens only from the allowed IPs.
 - **SSH**: `ssh -i ~/.ssh/workout-memo-lightsail ubuntu@<static_ip>`
 - **SSH tunnel** (encrypted transport): run `ssh -i ~/.ssh/workout-memo-lightsail -L 8101:127.0.0.1:8101 ubuntu@<static_ip>`, then open `http://localhost:8101`. Use it when the shared proxy (`https://workout-memo.daysofme.com`) is down.
@@ -376,7 +393,7 @@ Lightsail cannot change a running instance's plan. Changing `bundle_id` alone ma
 
 ### 12-1. First apply
 
-1. Attach the `terraform-wiki-site` policy to the Terraform user (section 1-2, step 5).
+1. Attach the `terraform-wiki-site` policy to the Terraform user (section 1-2, step 4c).
 2. Choose a user name and a password, and compute the hash that the function compares. Run this in PowerShell on your PC; it asks for the password without showing it and prints only the hash.
    ```powershell
    $user = "<user name>"
@@ -386,7 +403,7 @@ Lightsail cannot change a running instance's plan. Changing `bundle_id` alone ma
    -join ([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($header)) | ForEach-Object { $_.ToString("x2") })
    ```
    Put the printed value in `terraform.tfvars` as `wiki_auth_sha256 = "<64 characters>"`. Do not write the password anywhere; keep it in your password manager.
-3. Plan and apply as in section 2. The first plan adds 18 resources and changes or destroys none. The certificate validation and the distribution take 5 to 15 minutes.
+3. Plan and apply as in section 2. The first plan adds 17 resources and changes or destroys none (more if the server IP parameter of #69 is not applied yet). The certificate validation and the distribution take 5 to 15 minutes.
    - If the plan fails because the OIDC provider `token.actions.githubusercontent.com` already exists in the account, import it instead: `terraform import aws_iam_openid_connect_provider.github arn:aws:iam::<account ID>:oidc-provider/token.actions.githubusercontent.com`.
 4. Give the outputs to the notes repository as repository variables (they are not secrets; the role can be assumed only by that repository's `main` branch workflow). In the develop-skill folder, with the personal GitHub account:
    ```powershell
