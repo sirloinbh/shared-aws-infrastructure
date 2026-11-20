@@ -80,3 +80,9 @@ variable "app_file_recovery_days" {
   type    = number
   default = 30
 }
+
+# How long an earlier Terraform state version stays in the state bucket (#63).
+variable "state_version_days" {
+  type    = number
+  default = 90
+}
