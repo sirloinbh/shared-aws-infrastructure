@@ -22,6 +22,7 @@ terraform apply deploy.tfplan
 - `user_data` runs only on the first boot. Changing it does not recreate the existing instance (`ignore_changes`).
 - Terraform state and `terraform.tfvars` are not stored in git. There is no remote backend, so back them up outside the repo after each apply.
 - The budget alert is not a spending cap.
+- Terraform manages its own `terraform-*` IAM policies (`iam.tf`, `iam-policies/`), capped by a permissions boundary that only an administrator can change. The one-time CloudShell bootstrap is `scripts/bootstrap-iam.sh` ([operations doc](docs/operations.md) section 1-2).
 
 ## Recovery
 
