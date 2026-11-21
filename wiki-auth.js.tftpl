@@ -1,0 +1,33 @@
+// CloudFront function (viewer request) of the study notes wiki. Rendered by wiki.tf.
+import crypto from 'crypto';
+
+var EXPECTED = '${auth_sha256}';
+
+function handler(event) {
+  var request = event.request;
+  var header = request.headers.authorization;
+  var given = header ? crypto.createHash('sha256').update(header.value).digest('hex') : '';
+  if (given !== EXPECTED) {
+    return {
+      statusCode: 401,
+      statusDescription: 'Unauthorized',
+      headers: {
+        'www-authenticate': { value: 'Basic realm="wiki", charset="UTF-8"' },
+        'cache-control': { value: 'no-store' }
+      }
+    };
+  }
+  var uri = request.uri;
+  if (uri.endsWith('/')) {
+    request.uri = uri + 'index.html';
+  } else if (uri.split('/').pop().indexOf('.') < 0) {
+    // "/project/term" has no file name: send the browser to the folder address, so that the
+    // relative links of the page keep working.
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: { location: { value: uri + '/' } }
+    };
+  }
+  return request;
+}

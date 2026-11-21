@@ -1,15 +1,16 @@
 #!/bin/sh
-# First-boot setup of the Lightsail server (#73). Rendered by Terraform templatefile.
+# First-boot host baseline of the Lightsail server: time zone, swap, Docker, and Docker log limits.
 # Lightsail prepends its own commands and runs user_data with /bin/sh, so this wrapper
 # writes the bash script to a file and runs it with bash (pipefail needs bash).
-# Application deploys are done later by scripts/deploy.ps1.
+# Apps, the proxy, certificates, the shared .env, and timers are not set up here: the
+# Lightsail snapshot is the recovery path for the whole server (#64, docs/operations.md).
 set -eu
-cat > /usr/local/sbin/workout-init <<'INIT'
+cat > /usr/local/sbin/server-init <<'INIT'
 #!/bin/bash
 set -euxo pipefail
 timedatectl set-timezone Asia/Seoul
 
-# 2 GB swap: the 1 GB plan builds the Docker images on the server.
+# 2 GB swap: the Docker images are built on the server.
 if [ ! -f /swapfile ]; then
   fallocate -l 2G /swapfile
   chmod 600 /swapfile
@@ -28,39 +29,6 @@ JSON
 systemctl enable docker
 systemctl restart docker
 usermod -aG docker ubuntu
-
-APP=/opt/workout-memo
-if [ ! -d "$APP/.git" ]; then git clone ${repo_url} "$APP"; fi
-# The database password is generated here and never leaves the server.
-if [ ! -f "$APP/.env" ]; then
-  PASS=$(openssl rand -hex 24)
-  # Only the shared proxy on this server reaches the web port (project-standards#254).
-  printf 'POSTGRES_DB=workout\nPOSTGRES_USER=workout\nPOSTGRES_PASSWORD=%s\nWEB_BIND=127.0.0.1\nWEB_PORT=8101\n' "$PASS" > "$APP/.env"
-  chmod 600 "$APP/.env"
-fi
-chown -R ubuntu:ubuntu "$APP"
-
-# Nightly database dump at 03:30 Seoul, kept ${backup_days} days (also captured by snapshots).
-# Only for the first server: each app now installs its own dump timer with
-# deploy/install-backup.sh (project-standards#262), which also removes this cron entry.
-install -d -o ubuntu -g ubuntu -m 700 /var/backups/workout
-cat > /usr/local/bin/workout-backup <<'SCRIPT'
-#!/bin/bash
-set -euo pipefail
-cd /opt/workout-memo
-file=/var/backups/workout/workout-$(date +%F-%H%M%S).sql.gz
-docker compose exec -T db pg_dump -U workout -d workout | gzip > "$file.tmp"
-mv "$file.tmp" "$file"
-find /var/backups/workout -name 'workout-*.sql.gz' -mtime +${backup_days} -delete
-echo "$file"
-SCRIPT
-chmod 755 /usr/local/bin/workout-backup
-touch /var/log/workout-backup.log
-chown ubuntu:ubuntu /var/log/workout-backup.log
-echo '30 3 * * * ubuntu /usr/local/bin/workout-backup >> /var/log/workout-backup.log 2>&1' > /etc/cron.d/workout-backup
-
-# Pull-based deployment of CI-passed origin/main commits every 2 minutes (#75).
-bash "$APP/deploy/install-autodeploy.sh"
 INIT
-chmod 700 /usr/local/sbin/workout-init
-bash /usr/local/sbin/workout-init
+chmod 700 /usr/local/sbin/server-init
+bash /usr/local/sbin/server-init

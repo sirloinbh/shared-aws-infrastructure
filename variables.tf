@@ -14,6 +14,8 @@ variable "region" {
   type    = string
   default = "ap-northeast-2"
 }
+# Historical name: the shared server started as workout-memo's. Do not rename it; the name is part of
+# the Lightsail instance, static IP, key pair, and budget names, so a new value replaces them.
 variable "project" {
   type    = string
   default = "workout-memo"
@@ -42,10 +44,6 @@ variable "ssh_public_key_path" {
   type    = string
   default = "~/.ssh/workout-memo-lightsail.pub"
 }
-variable "repo_url" {
-  type    = string
-  default = "https://github.com/sirloinbh/workout-memo.git"
-}
 variable "root_domain" {
   type        = string
   default     = "daysofme.com"
@@ -56,18 +54,15 @@ variable "budget_emails" {
   description = "Recipients of the monthly cost alerts. Keep them in terraform.tfvars (git-ignored)."
 }
 variable "monthly_budget_usd" {
-  type    = number
-  default = 10
+  type        = number
+  default     = 20
+  description = "Monthly alert amount for the whole account, in USD. Keep it above the real monthly cost (about USD 15-17 with VAT for the 2 GB plan, docs/operations.md), or the alerts fire every month."
 }
-# Recommended values (#73): daily snapshot at 03:00 Seoul (AWS keeps the latest 7)
-# and a nightly database dump kept 14 days on the server.
+# Recommended value (#73): daily snapshot at 03:00 Seoul (AWS keeps the latest 7).
+# The snapshot is the recovery path for the whole server (#64).
 variable "snapshot_time_utc" {
   type    = string
   default = "18:00"
-}
-variable "backup_retention_days" {
-  type    = number
-  default = 14
 }
 # Off-site dump copies in S3 (#7): current and overwritten versions expire after this many days.
 variable "offsite_backup_days" {
@@ -85,4 +80,21 @@ variable "app_file_recovery_days" {
 variable "state_version_days" {
   type    = number
   default = 90
+}
+
+# Study notes wiki (wiki.tf). SHA-256 (64 lower-case hex characters) of the Authorization header
+# the browser sends for the wiki's user name and password. docs/operations.md section 12 shows
+# how to compute it; the password itself is stored nowhere.
+variable "wiki_auth_sha256" {
+  type        = string
+  description = "SHA-256 of the HTTP basic authentication header of the wiki. Keep it in terraform.tfvars (git-ignored)."
+  validation {
+    condition     = can(regex("^[0-9a-f]{64}$", var.wiki_auth_sha256))
+    error_message = "Enter 64 lower-case hex characters (docs/operations.md section 12)."
+  }
+}
+variable "wiki_repository" {
+  type        = string
+  default     = "sirloinbh/develop-skill"
+  description = "GitHub repository whose main-branch workflow may deploy the wiki."
 }

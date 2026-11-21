@@ -19,9 +19,9 @@ resource "aws_route53_record" "apps" {
   depends_on = [terraform_data.account_guard]
 }
 
-# Shared services under their own subdomain (local.registry.services in registry.tf).
+# Shared services under their own subdomain (local.registry.sharedServices in registry.tf).
 resource "aws_route53_record" "services" {
-  for_each   = toset(local.registry.services)
+  for_each   = toset(local.registry.sharedServices)
   zone_id    = data.aws_route53_zone.root.zone_id
   name       = "${each.key}.${var.root_domain}"
   type       = "A"

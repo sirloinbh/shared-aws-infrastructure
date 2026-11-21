@@ -8,20 +8,21 @@ Run every command in this repo's folder. The profile name in the examples is `wo
 
 | Item | Value | Monthly cost (before tax, estimate) |
 |---|---|---|
-| Lightsail `micro_3_0`, Seoul | 1GB RAM, 40GB SSD, public IPv4, 2TB transfer, Ubuntu 24.04 | $7.00 |
+| Lightsail `small_3_0`, Seoul (resized from `micro_3_0` on 2026-11-15, section 11) | 2GB RAM, 60GB SSD, public IPv4, 3TB transfer, Ubuntu 24.04 | $12.00 |
 | Static IP | While attached to the instance | $0 |
-| Automatic snapshots | Daily at 03:00 (Seoul time), AWS keeps the latest 7, $0.05/GB-month by used size | under about $1 |
+| Automatic snapshots | Daily at 03:00 (Seoul time), AWS keeps the latest 7, $0.05/GB-month by used size | about $1-2 |
 | DB dump | Daily at 03:30 (Seoul time), kept for 14 days in `/var/backups/workout` on the server (also included in the snapshots) | $0 |
 | Off-server copy of the DB dump (#7) | S3 `sirloinbh-db-backups-<account ID>`, a daily dump and a row-count file per app, kept for 30 days (overwritten earlier versions also 30 days) | under $0.1 because the dumps are small (S3 Standard $0.025/GB-month, a few hundred upload requests a month) |
 | study-log files (#53) | S3 `sirloinbh-study-log-files-<account ID>`, the original PDFs and photos of exercises; deleted or overwritten files stay recoverable for 30 days | a few cents for a few hundred MB (S3 Standard $0.025/GB-month), requests under $0.01 |
 | Terraform state (#63) | S3 `sirloinbh-terraform-state-<account ID>`, the state of this repo and its lock file; earlier versions kept 90 days (the newest 20 always) | under $0.01 (a few hundred KB, a few hundred requests a month) |
 | Reading the app keys (#8, #27) | SSM Parameter Store standard parameters, an IAM user | $0 |
 | App subdomains (#33) | Route 53 A records `<app>.daysofme.com` in the zone the domain registration created. The domain and the zone are billed yearly (project-standards `docs/costs.md`) | about $0.50 for the zone, queries under $0.01 |
+| Study notes wiki (develop-skill#30) | S3 `sirloinbh-wiki-site-<account ID>` (about 25 MB) behind CloudFront at `wiki.daysofme.com`, with a public certificate | under $0.1: CloudFront's free allowance (1 TB and 10 million requests a month) covers one reader, the certificate is free, S3 storage and about 5,000 uploads per deploy cost a few cents |
 | Logs | Docker json-file, 10MB x 3 rotation per container | $0 |
-| AWS Budgets | $10. Email at 50% and 80% of actual spend and 100% of forecasted spend | Free (a budget used only for alerts) |
-| Total | | **about $7-8** (plus 10% VAT) |
+| AWS Budgets | `monthly_budget_usd`, default $20. Email at 50% and 80% of actual spend and 100% of forecasted spend | Free (a budget used only for alerts) |
+| Total | | **about $14-15** (plus 10% VAT, about $15-17) |
 
-- The budget alert does not stop spending. It covers the cost of the whole personal account.
+- The budget alert does not stop spending. It covers the cost of the whole personal account. Keep `monthly_budget_usd` above the monthly total with VAT, or the forecast alert fires every month; check that `terraform.tfvars` does not override it with a lower value.
 - Cost sources: [Lightsail pricing](https://aws.amazon.com/lightsail/pricing/), [Budgets pricing](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/). The actual bill follows the prices and taxes at billing time.
 - ECR and CloudWatch Logs are not used. S3 holds the DB dump copies and study-log's files. The user decided to keep an off-server copy instead of leaving a long-lived AWS key on the server (2026-10-27, project-standards#262), and to add a key for study-log's files because the server cannot use an IAM role (2026-11-17, #53). The server has four keys: one that can only upload to the backup bucket, one that can read only the app keys in SSM, one that can only write the certificate challenge record, and one that can only read, write and delete study-log's files (section 10).
 - Each app is `https://<app>.daysofme.com`, only from allowed IPs. The shared reverse proxy on the server (project-standards#253) takes 80 and 443 and forwards each name to the app's web port on `127.0.0.1`, which is not open in the firewall.
@@ -142,6 +143,50 @@ Create an IAM user only for Terraform and use that user's access key.
      ]
    }
    ```
+4d. Study notes wiki (develop-skill#30): IAM → Policies → Create policy → JSON, name it `terraform-wiki-site`, then attach it to the user as in step 3.
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Sid": "WikiBucket",
+         "Effect": "Allow",
+         "Action": "s3:*",
+         "Resource": ["arn:aws:s3:::sirloinbh-wiki-site-*", "arn:aws:s3:::sirloinbh-wiki-site-*/*"]
+       },
+       { "Sid": "CloudFront", "Effect": "Allow", "Action": "cloudfront:*", "Resource": "*" },
+       {
+         "Sid": "Certificates",
+         "Effect": "Allow",
+         "Action": [
+           "acm:RequestCertificate", "acm:DescribeCertificate", "acm:GetCertificate", "acm:DeleteCertificate",
+           "acm:ListCertificates", "acm:ListTagsForCertificate", "acm:AddTagsToCertificate", "acm:RemoveTagsFromCertificate"
+         ],
+         "Resource": "*"
+       },
+       {
+         "Sid": "GitHubOidcProvider",
+         "Effect": "Allow",
+         "Action": [
+           "iam:CreateOpenIDConnectProvider", "iam:GetOpenIDConnectProvider", "iam:DeleteOpenIDConnectProvider",
+           "iam:TagOpenIDConnectProvider", "iam:UntagOpenIDConnectProvider", "iam:ListOpenIDConnectProviders",
+           "iam:AddClientIDToOpenIDConnectProvider", "iam:UpdateOpenIDConnectProviderThumbprint"
+         ],
+         "Resource": "*"
+       },
+       {
+         "Sid": "WikiDeployRole",
+         "Effect": "Allow",
+         "Action": [
+           "iam:CreateRole", "iam:GetRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
+           "iam:TagRole", "iam:UntagRole", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies",
+           "iam:ListInstanceProfilesForRole", "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy"
+         ],
+         "Resource": "arn:aws:iam::*:role/sirloinbh-wiki-*"
+       }
+     ]
+   }
+   ```
 5. Security credentials tab → Create access key → use case "Command Line Interface (CLI)". In the description tag, write which PC it is for.
 6. Register it under a name so it does not mix with the company profile, and check the account.
    ```powershell
@@ -172,6 +217,7 @@ Copy `terraform.tfvars.example` to `terraform.tfvars` and fill in the values. Th
 - `expected_account_id`: the plan fails if the credentials belong to another account.
 - `allowed_cidrs`: for example `["1.2.3.4/32"]`. Check your current public IP at `https://checkip.amazonaws.com`. If the server already exists, look at the current rules (`aws lightsail get-instance-port-states`) and match them.
 - `budget_emails`
+- `wiki_auth_sha256`: the password hash of the study notes wiki (section 12)
 
 Copy `state.tfbackend.example` to `state.tfbackend` (also excluded from git) and fill in `bucket` (the `state_bucket` output, `sirloinbh-terraform-state-<account ID>`) and `profile` (the same as `aws_profile`). `terraform init` reads it to find the remote state (section 3).
 
@@ -183,13 +229,13 @@ When you create the files in PowerShell 5.1, write them as UTF-8 without BOM: `[
 terraform init "-backend-config=state.tfbackend"
 terraform plan "-out=deploy.tfplan"   # the list of creates and changes, and the account check (without quotes, PowerShell splits `-out=` at the dot)
 terraform apply deploy.tfplan
-terraform output                      # static_ip, url, ssh, server_ip_parameter, backup_bucket, the server IAM user names
+terraform output                      # static_ip, ssh, app_urls, server_ip_parameter, backup_bucket, the server IAM user names
 ```
 
-- What gets created: the SSH key registration, the instance, the static IP and its attachment, the firewall (ports 22 and 80 open only to the allowed IPs), the monthly budget alert, the S3 bucket for DB dump copies, the S3 bucket for the Terraform state (#63), and two IAM users for the server (section 10).
+- What gets created: the SSH key registration, the instance, the static IP and its attachment, the firewall (ports 22, 80, and 443 open only to the allowed IPs), the monthly budget alert, the S3 buckets for DB dump copies and study-log files, the S3 bucket for the Terraform state (#63), the app subdomain records, and four IAM users for the server (section 10).
 - In a new account the state bucket does not exist yet, so `terraform init` with the backend fails. Create the bucket first as in 3-2.
 - If the plan has a replacement (`-/+`) or a deletion, do not apply. Recreating the static IP changes the public address.
-- `user-data.sh` runs on the first boot. Lightsail runs user_data with `/bin/sh`, so an sh wrapper writes and runs a bash script (`/usr/local/sbin/workout-init`). It sets up 2GB of swap, the Docker and Compose install, the app repository clone, DB password generation (the server `.env`, which never leaves the server), the backup cron, and the auto-deploy timer. It takes a few minutes.
+- `user-data.sh` runs on the first boot. Lightsail runs user_data with `/bin/sh`, so an sh wrapper writes and runs a bash script (`/usr/local/sbin/server-init`). It sets up only the host baseline: the time zone, 2GB of swap, Docker and Compose, and the Docker log limits. It takes a few minutes. Apps, the proxy, certificates, the shared `.env`, and timers are not set up; a lost server comes back from a snapshot (section 13).
 - `user_data` runs only on the first boot. Changing it does not recreate the existing instance (`ignore_changes`).
 
 ## 3. State management
@@ -279,6 +325,10 @@ aws lightsail get-instance-port-states @p --instance-name workout-memo-app --out
 | `aws_s3_bucket.study_log_files` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the files |
 | `aws_s3_bucket.terraform_state` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew; it has `prevent_destroy` and holds every earlier state |
 | `aws_iam_user.*`, `aws_iam_user_policy.*` | Possible (user name, `user:policy name`) | import |
+| `aws_s3_bucket.wiki` and its 5 bucket settings | Possible (bucket name) | import, or delete the bucket and let apply create it; the next deploy uploads the site again |
+| `aws_cloudfront_distribution.wiki`, `aws_cloudfront_origin_access_control.wiki`, `aws_cloudfront_function.wiki` | Possible (distribution ID, access control ID, function name) | import. A new distribution would get another address, so the DNS records would change |
+| `aws_acm_certificate.wiki`, `aws_route53_record.wiki*` | Possible (certificate ARN in us-east-1; `zone ID_name_type`) | import. `aws_acm_certificate_validation.wiki` cannot be imported; apply creates it without changing AWS |
+| `aws_iam_openid_connect_provider.github`, `aws_iam_role.wiki_deploy`, `aws_iam_role_policy.wiki_deploy` | Possible (provider ARN, role name, `role:policy name`) | import |
 
 ### 4-3. Procedure
 
@@ -370,7 +420,7 @@ All apps on the server share these users, so they are named `sirloinbh-apps-*`, 
 | `sirloinbh-apps-backup-uploader` | Only upload files to the backup bucket (no read, list, or delete) | `BACKUP_S3_BUCKET` (= the `backup_bucket` output value), `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY` |
 | `sirloinbh-apps-certbot` | Only write the `_acme-challenge.<root_domain>` TXT record in the domain's hosted zone (#33, project-standards ADR-0012). It cannot change any other record | `CERTBOT_AWS_ACCESS_KEY_ID`, `CERTBOT_AWS_SECRET_ACCESS_KEY` (read by `cert.sh` of the server reverse proxy, project-standards `docs/server-proxy.md`) |
 | `sirloinbh-apps-study-log-files` (#53) | Only get, put and delete objects in the study-log files bucket, and list its keys so a missing file reads as not found. It cannot change the bucket or remove earlier versions | Not in the shared file: only study-log uses it. Put `FILE_BUCKET` (= the `study_log_files_bucket` output value), `AWS_REGION=ap-northeast-2`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in study-log's server `.env` (`/opt/study-log/.env`), which its compose file passes to the API |
-| `sirloinbh-apps-secrets-reader` | Only read (`ssm:GetParameter`) SSM parameters under `/sirloinbh/shared/` and `/sirloinbh/<app>/` for the apps in `local.secret_apps` (`registry.tf`, project-standards ADR-0014) | `SECRETS_AWS_ACCESS_KEY_ID`, `SECRETS_AWS_SECRET_ACCESS_KEY` (read by every app whose `.env.example` tags a key with `@ssm=`, and by apps that use the Claude API) |
+| `sirloinbh-apps-secrets-reader` | Only read (`ssm:GetParameter`) SSM parameters under `/sirloinbh/shared/` and `/sirloinbh/<app>/` for the apps in `local.registry.secretApps` (the generated `apps.json`, read in `registry.tf`; project-standards ADR-0014) | `SECRETS_AWS_ACCESS_KEY_ID`, `SECRETS_AWS_SECRET_ACCESS_KEY` (read by every app whose `.env.example` tags a key with `@ssm=`, and by apps that use the Claude API) |
 
 1. Console → IAM → Users → the user above → Security credentials → Create access key → use case "Application running outside AWS". Write "lightsail-server" in the description tag.
 2. Connect to the server and put the keys above in one place, the shared file `/opt/project-standards/.env`. Do not put them in each app. Type the values only on the server and do not leave them in chat or docs. Create the file once:
@@ -385,7 +435,7 @@ All apps on the server share these users, so they are named `sirloinbh-apps-*`, 
 
 ## 11. Resize the server (from a snapshot)
 
-Lightsail cannot change a running instance's plan. Changing `bundle_id` alone makes Terraform replace the instance with a blank Ubuntu one built from `user-data.sh`, and the DB on it is lost. Resize by building a new instance from a snapshot, then point Terraform at it. Done on 2026-11-15 from 1 GB (`micro_3_0`) to 2 GB (`small_3_0`) (#38, project-standards#564).
+Lightsail cannot change a running instance's plan. Changing `bundle_id` alone makes Terraform replace the instance with a new one that has only the `user-data.sh` host baseline (no apps), and the DB on it is lost. Resize by building a new instance from a snapshot, then point Terraform at it. Done on 2026-11-15 from 1 GB (`micro_3_0`) to 2 GB (`small_3_0`) (#38, project-standards#564).
 
 1. Note the time. The state bucket keeps the state from before the resize, and 3-3 brings it back if a step below goes wrong.
 2. Snapshot: `aws lightsail create-instance-snapshot --instance-name <old> --instance-snapshot-name <old>-resize-<date>`, and wait until `get-instance-snapshot` says `available` (about 3 minutes for 1 GB). The app keeps running.
@@ -403,3 +453,58 @@ Lightsail cannot change a running instance's plan. Changing `bundle_id` alone ma
    ```
    `aws_lightsail_instance_public_ports` cannot be imported, so apply adds it again with the same rules.
 8. After about a week without problems, delete the stopped old instance and the manual snapshot (`aws lightsail delete-instance`, `delete-instance-snapshot`). The old instance's automatic snapshots stay until deleted and cost money.
+
+## 12. Study notes wiki (develop-skill#30)
+
+`wiki.tf` hosts the static wiki that `sirloinbh/develop-skill` builds from its notes: a private S3 bucket, a CloudFront distribution at `https://wiki.daysofme.com/`, and a CloudFront function that asks for one user name and password. The decision and its reasons are in develop-skill `docs/wiki-site.md`. The notes repository uploads the site itself; this repo only owns the AWS resources.
+
+### 12-1. First apply
+
+1. Attach the `terraform-wiki-site` policy to the Terraform user (section 1-2, step 4d).
+2. Choose a user name and a password, and compute the hash that the function compares. Run this in PowerShell on your PC; it asks for the password without showing it and prints only the hash.
+   ```powershell
+   $user = "<user name>"
+   $pass = Read-Host "Wiki password" -AsSecureString
+   $plain = [Net.NetworkCredential]::new("", $pass).Password
+   $header = "Basic " + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("${user}:$plain"))
+   -join ([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($header)) | ForEach-Object { $_.ToString("x2") })
+   ```
+   Put the printed value in `terraform.tfvars` as `wiki_auth_sha256 = "<64 characters>"`. Do not write the password anywhere; keep it in your password manager.
+3. Plan and apply as in section 2. The first plan adds 17 resources and changes or destroys none (more if earlier changes such as the server IP parameter of #69 or the state bucket of #63 are not applied yet). The certificate validation and the distribution take 5 to 15 minutes.
+   - If the plan fails because the OIDC provider `token.actions.githubusercontent.com` already exists in the account, import it instead: `terraform import aws_iam_openid_connect_provider.github arn:aws:iam::<account ID>:oidc-provider/token.actions.githubusercontent.com`.
+4. Give the outputs to the notes repository as repository variables (they are not secrets; the role can be assumed only by that repository's `main` branch workflow). In the develop-skill folder, with the personal GitHub account:
+   ```powershell
+   gh variable set WIKI_DEPLOY_ROLE_ARN --repo sirloinbh/develop-skill --body (terraform -chdir=<this folder> output -raw wiki_deploy_role_arn)
+   gh variable set WIKI_BUCKET --repo sirloinbh/develop-skill --body (terraform -chdir=<this folder> output -raw wiki_bucket)
+   gh variable set WIKI_DISTRIBUTION_ID --repo sirloinbh/develop-skill --body (terraform -chdir=<this folder> output -raw wiki_distribution_id)
+   ```
+5. Run the `wiki` workflow of develop-skill once (Actions → wiki → Run workflow), then open `https://wiki.daysofme.com/` on the phone and enter the user name and password. The browser remembers them.
+
+### 12-2. Operations
+
+- **Change the password**: compute a new hash (step 2), replace `wiki_auth_sha256`, plan, and apply. Only the function changes (`0 to add, 1 to change`), and the new password works within about a minute.
+- **How it stays private**: the function runs before the cache on every request, so a cached page is never served without the password. The bucket blocks public access and lets only this distribution read it.
+- **Limits**: basic authentication has no lockout, so use a long random password. The hash is in the function code and in the state; someone who can read them can test password guesses offline.
+- **A page shows old content**: the deploy workflow clears the CloudFront cache at the end. To do it by hand: `aws cloudfront create-invalidation --profile workout-personal --distribution-id <wiki_distribution_id> --paths "/*"`.
+- **Teardown**: `terraform destroy` fails while the bucket has files. Empty it first: `aws s3 rm s3://<wiki_bucket> --recursive --profile workout-personal`.
+
+## 13. Recover the server from a snapshot (#64)
+
+The Lightsail snapshot is the only recovery path for the whole server (user decision 2026-11-21). The server holds every app, shared-auth, shared-ai, the nginx proxy, the certbot certificates, the shared `.env`, and the timers, and no repo can rebuild them all; `user-data.sh` gives a new instance only the host baseline. Use this when the instance is broken or lost. To change the plan size instead, use section 11.
+
+1. Back up the state as in section 3.
+2. Pick the snapshot. The automatic ones are daily at 03:00 Seoul, and AWS keeps the latest 7:
+   ```powershell
+   aws lightsail get-auto-snapshots --profile workout-personal --resource-name <old> --query "autoSnapshots[].{date:date,status:status}" --output table
+   ```
+   A manual snapshot (`get-instance-snapshots`) also works. Take one before any risky server change: `aws lightsail create-instance-snapshot --instance-name <old> --instance-snapshot-name <old>-<date>`.
+3. Build a new instance with a **new name** from it. From an automatic snapshot:
+   ```powershell
+   aws lightsail create-instances-from-snapshot --profile workout-personal --instance-names <new> --availability-zone ap-northeast-2a --source-instance-name <old> --restore-date <YYYY-MM-DD> --bundle-id <bundle> --key-pair-name workout-memo-deploy --ip-address-type ipv4 --add-ons 'addOnType=AutoSnapshot,autoSnapshotAddOnRequest={snapshotTimeOfDay=18:00}' --tags key=Project,value=workout-memo
+   ```
+   From a manual snapshot, use `--instance-snapshot-name <snapshot>` instead of `--source-instance-name` and `--restore-date`.
+4. Do steps 4-7 of section 11: close the default firewall, move the static IP, check `https://<app>.<root_domain>/api/health` for every app in `apps.json`, stop the old instance if it still runs, and point Terraform at the new instance (`instance_name` in `terraform.tfvars`, `state rm`, `import`, a plan with 1 to add, 0 to change, 0 to destroy).
+5. Data written after the snapshot is not on the new instance. If an app needs it, restore that app's latest off-server dump from S3 `sirloinbh-db-backups-<account ID>` with the app repo's backup restore steps.
+6. Delete the old instance and manual snapshots you no longer need after about a week, as in section 11 step 8.
+
+If no snapshot is left (for example, the instance and its snapshots were deleted), there is no scripted rebuild: build a server with `terraform apply`, then install each app with its own repo's deploy docs and restore the databases from the S3 dumps.

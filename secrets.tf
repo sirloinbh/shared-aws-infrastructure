@@ -5,13 +5,13 @@
 # in project-standards creates and replaces them. App deploy scripts read the keys their
 # .env.example tags with @ssm= (deploy/ssm-get.sh).
 locals {
-  # local.secret_apps (registry.tf) lists the apps and shared services whose own keys the server
-  # may read. shared-auth is the shared sign-in (project-standards ADR-0015, #550); shared-ai is
+  # local.registry.secretApps (registry.tf) lists the apps and shared services whose own keys the
+  # server may read. shared-auth is the shared sign-in (project-standards ADR-0015, #550); shared-ai is
   # the AI service with its tool signing key and Claude key (ADR-0017, ADR-0019, #611).
   parameter_arn_prefix = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/sirloinbh"
   secret_parameter_arns = concat(
     ["${local.parameter_arn_prefix}/shared/*"],
-    [for app in local.secret_apps : "${local.parameter_arn_prefix}/${app}/*"],
+    [for app in local.registry.secretApps : "${local.parameter_arn_prefix}/${app}/*"],
   )
 }
 

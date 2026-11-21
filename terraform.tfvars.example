@@ -3,3 +3,5 @@ aws_profile         = "workout-personal"
 expected_account_id = "000000000000"
 allowed_cidrs       = ["203.0.113.10/32"]
 budget_emails       = ["you@example.com"]
+# Study notes wiki password hash (docs/operations.md section 12). Replace the zeros.
+wiki_auth_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
