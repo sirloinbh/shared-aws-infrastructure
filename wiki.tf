@@ -11,73 +11,55 @@ locals {
 }
 
 # The site files. Everything in it is rebuilt from the notes on each deploy, so no versioning.
-resource "aws_s3_bucket" "wiki" {
-  bucket     = "sirloinbh-wiki-site-${data.aws_caller_identity.current.account_id}"
-  tags       = local.wiki_tags
-  depends_on = [terraform_data.account_guard]
-}
-
-resource "aws_s3_bucket_public_access_block" "wiki" {
-  bucket                  = aws_s3_bucket.wiki.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_ownership_controls" "wiki" {
-  bucket = aws_s3_bucket.wiki.id
-  rule {
-    object_ownership = "BucketOwnerEnforced"
-  }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "wiki" {
-  bucket = aws_s3_bucket.wiki.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "wiki" {
-  bucket = aws_s3_bucket.wiki.id
-  rule {
-    id     = "abort-failed-uploads"
-    status = "Enabled"
-    filter {}
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 1
-    }
-  }
-}
-
 # Only this distribution may read the files, and only over HTTPS. The bucket has no public access.
-resource "aws_s3_bucket_policy" "wiki" {
-  bucket     = aws_s3_bucket.wiki.id
-  depends_on = [aws_s3_bucket_public_access_block.wiki]
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "CloudFrontRead"
-        Effect    = "Allow"
-        Principal = { Service = "cloudfront.amazonaws.com" }
-        Action    = "s3:GetObject"
-        Resource  = "${aws_s3_bucket.wiki.arn}/*"
-        Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.wiki.arn } }
-      },
-      {
-        Sid       = "DenyInsecureTransport"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource  = [aws_s3_bucket.wiki.arn, "${aws_s3_bucket.wiki.arn}/*"]
-        Condition = { Bool = { "aws:SecureTransport" = "false" } }
-      },
-    ]
-  })
+module "wiki" {
+  source     = "./modules/private_bucket"
+  name       = "sirloinbh-wiki-site-${data.aws_caller_identity.current.account_id}"
+  tags       = local.wiki_tags
+  versioning = false
+  depends_on = [terraform_data.account_guard]
+  lifecycle_rule = {
+    id = "abort-failed-uploads"
+  }
+  policy_statements = [{
+    Sid       = "CloudFrontRead"
+    Effect    = "Allow"
+    Principal = { Service = "cloudfront.amazonaws.com" }
+    Action    = "s3:GetObject"
+    Resource  = "${module.wiki.arn}/*"
+    Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.wiki.arn } }
+  }]
+}
+
+# Moved into modules/private_bucket (#80); these keep the existing bucket and its settings.
+moved {
+  from = aws_s3_bucket.wiki
+  to   = module.wiki.aws_s3_bucket.this
+}
+
+moved {
+  from = aws_s3_bucket_public_access_block.wiki
+  to   = module.wiki.aws_s3_bucket_public_access_block.this
+}
+
+moved {
+  from = aws_s3_bucket_ownership_controls.wiki
+  to   = module.wiki.aws_s3_bucket_ownership_controls.this
+}
+
+moved {
+  from = aws_s3_bucket_server_side_encryption_configuration.wiki
+  to   = module.wiki.aws_s3_bucket_server_side_encryption_configuration.this
+}
+
+moved {
+  from = aws_s3_bucket_lifecycle_configuration.wiki
+  to   = module.wiki.aws_s3_bucket_lifecycle_configuration.this
+}
+
+moved {
+  from = aws_s3_bucket_policy.wiki
+  to   = module.wiki.aws_s3_bucket_policy.this
 }
 
 # CloudFront reads certificates only from us-east-1. Validation is one DNS record in the zone.
@@ -146,7 +128,7 @@ resource "aws_cloudfront_distribution" "wiki" {
 
   origin {
     origin_id                = local.wiki_origin
-    domain_name              = aws_s3_bucket.wiki.bucket_regional_domain_name
+    domain_name              = module.wiki.bucket_regional_domain_name
     origin_access_control_id = aws_cloudfront_origin_access_control.wiki.id
   }
 
@@ -246,13 +228,13 @@ resource "aws_iam_role_policy" "wiki_deploy" {
         Sid      = "ListSiteFiles"
         Effect   = "Allow"
         Action   = "s3:ListBucket"
-        Resource = aws_s3_bucket.wiki.arn
+        Resource = module.wiki.arn
       },
       {
         Sid      = "WriteSiteFiles"
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-        Resource = "${aws_s3_bucket.wiki.arn}/*"
+        Resource = "${module.wiki.arn}/*"
       },
       {
         Sid      = "RefreshCache"
