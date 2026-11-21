@@ -13,6 +13,11 @@ terraform {
     use_lockfile = true
   }
 }
+# Personal account only: pass the profile explicitly so a company default profile is never used.
+provider "aws" {
+  region  = var.region
+  profile = var.aws_profile
+}
 # CloudFront reads certificates only from us-east-1 (wiki.tf).
 provider "aws" {
   alias   = "us_east_1"
