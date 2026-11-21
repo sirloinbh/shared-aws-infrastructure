@@ -66,7 +66,7 @@ ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 case "$CALLER" in
   */"$TF_USER") fail "run this as root or an administrator, not as $TF_USER" ;;
 esac
-say "signed in as an administrator of the account"
+say "signed in as someone other than $TF_USER"
 
 USER_ARN=$(aws iam get-user --user-name "$TF_USER" --query User.Arn --output text) \
   || fail "user $TF_USER not found (create it first, docs/operations.md 1-2 step 1)"
