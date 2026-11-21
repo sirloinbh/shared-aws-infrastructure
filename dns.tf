@@ -34,9 +34,10 @@ resource "aws_route53_record" "services" {
 # Its key can only write the one TXT record Let's Encrypt checks. The access key is made in the
 # console (docs/operations.md section 10).
 resource "aws_iam_user" "certbot" {
-  name       = "${local.shared_prefix}-certbot"
-  tags       = local.tags
-  depends_on = [terraform_data.account_guard]
+  name                 = "${local.shared_prefix}-certbot"
+  permissions_boundary = local.terraform_server_user_boundary
+  tags                 = local.tags
+  depends_on           = [terraform_data.account_guard]
 }
 
 resource "aws_iam_user_policy" "certbot" {

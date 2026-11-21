@@ -77,9 +77,10 @@ resource "aws_s3_bucket_policy" "backups" {
 # The server's upload-only identity. Its access key is made in the console (docs/operations.md)
 # so the secret never enters the Terraform state.
 resource "aws_iam_user" "backup_uploader" {
-  name       = "${local.shared_prefix}-backup-uploader"
-  tags       = local.tags
-  depends_on = [terraform_data.account_guard]
+  name                 = "${local.shared_prefix}-backup-uploader"
+  permissions_boundary = local.terraform_server_user_boundary
+  tags                 = local.tags
+  depends_on           = [terraform_data.account_guard]
 }
 
 resource "aws_iam_user_policy" "backup_uploader" {

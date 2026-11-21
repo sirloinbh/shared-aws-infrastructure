@@ -82,9 +82,10 @@ resource "aws_s3_bucket_policy" "study_log_files" {
 # so a leaked key cannot turn off versioning or delete earlier versions. Its access key is made in
 # the console (docs/operations.md), as for the other users.
 resource "aws_iam_user" "study_log_files" {
-  name       = "${local.shared_prefix}-study-log-files"
-  tags       = local.tags
-  depends_on = [terraform_data.account_guard]
+  name                 = "${local.shared_prefix}-study-log-files"
+  permissions_boundary = local.terraform_server_user_boundary
+  tags                 = local.tags
+  depends_on           = [terraform_data.account_guard]
 }
 
 resource "aws_iam_user_policy" "study_log_files" {
