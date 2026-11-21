@@ -210,10 +210,14 @@ resource "aws_iam_openid_connect_provider" "github" {
 # The deploy identity: only a workflow on the main branch of the notes repository can assume it.
 # The subject uses the immutable form with owner and repository IDs (see var.wiki_oidc_subject_prefix),
 # so a renamed or re-created repository with the same name cannot assume it.
+# The boundary caps it at uploading the site and clearing the cache, whatever its policies say (#85).
 resource "aws_iam_role" "wiki_deploy" {
   name                 = "sirloinbh-wiki-deploy"
   max_session_duration = 3600
+  permissions_boundary = local.terraform_role_boundary
   tags                 = local.wiki_tags
+  # Setting the boundary needs iam:PutRolePermissionsBoundary from the terraform-wiki-site policy.
+  depends_on = [aws_iam_policy.terraform]
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{

@@ -13,6 +13,9 @@ locals {
     "terraform-state",
     "terraform-wiki-site",
   ])
+  # The boundary every role that Terraform creates must carry (#85). The bootstrap makes it, and
+  # terraform-boundary refuses to create a role, or write its policy, without it.
+  terraform_role_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/terraform-role-boundary"
 }
 
 resource "aws_iam_policy" "terraform" {

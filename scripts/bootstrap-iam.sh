@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# One-time bootstrap that lets Terraform manage its own IAM policies (#79, docs/operations.md 1-2).
+# One-time bootstrap that lets Terraform manage its own IAM policies (#79) and caps the roles it
+# creates (#85). Steps are in docs/operations.md 1-2.
 # Run it in AWS CloudShell of the personal account, signed in as root or an administrator, not as
 # terraform-workout. It is safe to run again: each step changes AWS only when it differs from below.
 #
@@ -7,7 +8,11 @@
 #      permissions boundary, so every policy Terraform writes for itself is capped by it.
 #   2. Policy `terraform-iam-self`: lets terraform-workout create, version and delete policies named
 #      `terraform-*` and attach them only to itself.
-#   Both deny changing the boundary and editing these two policies, so Terraform cannot widen the cap.
+#   3. Policy `terraform-role-boundary`: the most a role that terraform-workout creates can ever do
+#      (upload the wiki site and clear its cache). terraform-boundary lets the user create a role, or
+#      write its policy, only when the role carries this boundary, and never remove it (#85).
+#   All three deny changing the boundaries and editing these three policies, so Terraform cannot
+#   widen either cap.
 set -euo pipefail
 export AWS_PAGER=""
 
@@ -26,7 +31,7 @@ upsert_policy() {
       *) fail "reading policy $name: $err" ;;
     esac
     aws iam create-policy --policy-name "$name" --policy-document "$doc" \
-      --description "Bootstrap of #79 in sirloinbh/shared-aws-infrastructure. Terraform must not edit it." >/dev/null
+      --description "Made by scripts/bootstrap-iam.sh in sirloinbh/shared-aws-infrastructure. Terraform must not edit it." >/dev/null
     say "policy $name created"
     return
   fi
@@ -72,7 +77,10 @@ USER_ARN=$(aws iam get-user --user-name "$TF_USER" --query User.Arn --output tex
   || fail "user $TF_USER not found (create it first, docs/operations.md 1-2 step 1)"
 say "user $TF_USER exists"
 
-GUARDED="\"arn:aws:iam::${ACCOUNT}:policy/terraform-boundary\", \"arn:aws:iam::${ACCOUNT}:policy/terraform-iam-self\""
+BOUNDARY_ARN="arn:aws:iam::${ACCOUNT}:policy/terraform-boundary"
+SELF_ARN="arn:aws:iam::${ACCOUNT}:policy/terraform-iam-self"
+ROLE_BOUNDARY_ARN="arn:aws:iam::${ACCOUNT}:policy/terraform-role-boundary"
+GUARDED="\"${BOUNDARY_ARN}\", \"${SELF_ARN}\", \"${ROLE_BOUNDARY_ARN}\""
 GUARD_STATEMENTS=$(cat <<EOF
     {
       "Sid": "KeepBoundary",
@@ -92,7 +100,38 @@ GUARD_STATEMENTS=$(cat <<EOF
 EOF
 )
 
-# --- 1. The boundary --------------------------------------------------------------------------
+# --- 1. The role boundary ---------------------------------------------------------------------
+# What the wiki deploy role needs (wiki.tf, aws_iam_role_policy.wiki_deploy), and nothing else. A role
+# that carries it can do no more, whatever inline policy or trust policy Terraform gives it.
+ROLE_BOUNDARY=$(cat <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ListSiteFiles",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::sirloinbh-wiki-site-*"
+    },
+    {
+      "Sid": "WriteSiteFiles",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::sirloinbh-wiki-site-*/*"
+    },
+    {
+      "Sid": "RefreshCache",
+      "Effect": "Allow",
+      "Action": "cloudfront:CreateInvalidation",
+      "Resource": "arn:aws:cloudfront::${ACCOUNT}:distribution/*"
+    }
+  ]
+}
+EOF
+)
+upsert_policy terraform-role-boundary "$ROLE_BOUNDARY"
+
+# --- 2. The user's boundary -------------------------------------------------------------------
 # Services this repo uses. IAM is limited to the resources Terraform manages: the server users
 # (sirloinbh-apps-*), the wiki deploy role and its OIDC provider, the terraform-* policies, and itself.
 BOUNDARY=$(cat <<EOF
@@ -142,11 +181,18 @@ BOUNDARY=$(cat <<EOF
       "Sid": "WikiDeployRole",
       "Effect": "Allow",
       "Action": [
-        "iam:CreateRole", "iam:GetRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
+        "iam:GetRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
         "iam:TagRole", "iam:UntagRole", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies",
-        "iam:ListInstanceProfilesForRole", "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy"
+        "iam:ListInstanceProfilesForRole", "iam:GetRolePolicy", "iam:DeleteRolePolicy"
       ],
       "Resource": "arn:aws:iam::${ACCOUNT}:role/sirloinbh-wiki-*"
+    },
+    {
+      "Sid": "WikiDeployRoleWithBoundary",
+      "Effect": "Allow",
+      "Action": ["iam:CreateRole", "iam:PutRolePolicy", "iam:PutRolePermissionsBoundary"],
+      "Resource": "arn:aws:iam::${ACCOUNT}:role/sirloinbh-wiki-*",
+      "Condition": { "StringEquals": { "iam:PermissionsBoundary": "${ROLE_BOUNDARY_ARN}" } }
     },
     {
       "Sid": "TerraformPolicies",
@@ -172,6 +218,19 @@ BOUNDARY=$(cat <<EOF
       "Condition": { "ArnNotLike": { "iam:PolicyARN": "arn:aws:iam::${ACCOUNT}:policy/terraform-*" } }
     },
     {
+      "Sid": "OnlyBoundedRoles",
+      "Effect": "Deny",
+      "Action": ["iam:CreateRole", "iam:PutRolePolicy", "iam:AttachRolePolicy", "iam:PutRolePermissionsBoundary"],
+      "Resource": "*",
+      "Condition": { "StringNotEquals": { "iam:PermissionsBoundary": "${ROLE_BOUNDARY_ARN}" } }
+    },
+    {
+      "Sid": "KeepRoleBoundary",
+      "Effect": "Deny",
+      "Action": "iam:DeleteRolePermissionsBoundary",
+      "Resource": "*"
+    },
+    {
       "Sid": "NoAssumeRole",
       "Effect": "Deny",
       "Action": "sts:AssumeRole",
@@ -184,8 +243,7 @@ EOF
 )
 upsert_policy terraform-boundary "$BOUNDARY"
 
-# --- 2. Set the boundary before any self-management right exists -------------------------------
-BOUNDARY_ARN="arn:aws:iam::${ACCOUNT}:policy/terraform-boundary"
+# --- 3. Set the boundary before any self-management right exists -------------------------------
 if [ "$(aws iam get-user --user-name "$TF_USER" --query 'User.PermissionsBoundary.PermissionsBoundaryArn' --output text)" = "$BOUNDARY_ARN" ]; then
   say "boundary already set on $TF_USER"
 else
@@ -193,7 +251,7 @@ else
   say "boundary set on $TF_USER"
 fi
 
-# --- 3. The self-management policy -----------------------------------------------------------
+# --- 4. The self-management policy -----------------------------------------------------------
 IAM_SELF=$(cat <<EOF
 {
   "Version": "2012-10-17",
@@ -228,8 +286,7 @@ EOF
 )
 upsert_policy terraform-iam-self "$IAM_SELF"
 
-# --- 4. Attach it ----------------------------------------------------------------------------
-SELF_ARN="arn:aws:iam::${ACCOUNT}:policy/terraform-iam-self"
+# --- 5. Attach it ----------------------------------------------------------------------------
 if aws iam list-attached-user-policies --user-name "$TF_USER" \
     --query "AttachedPolicies[?PolicyArn=='${SELF_ARN}'].PolicyArn" --output text | grep -q .; then
   say "terraform-iam-self already attached to $TF_USER"
@@ -238,7 +295,7 @@ else
   say "terraform-iam-self attached to $TF_USER"
 fi
 
-# --- 5. Check the result with the IAM policy simulator ---------------------------------------
+# --- 6. Check the result with the IAM policy simulator ---------------------------------------
 STATE_POLICY="arn:aws:iam::${ACCOUNT}:policy/terraform-state"
 expect_decision allowed iam:CreatePolicyVersion "$STATE_POLICY" "can version terraform-* policies"
 expect_decision allowed iam:AttachUserPolicy "$USER_ARN" "can attach a terraform-* policy to itself" \
@@ -248,5 +305,12 @@ expect_decision denied iam:AttachUserPolicy "$USER_ARN" "cannot attach Administr
 expect_decision denied iam:DeleteUserPermissionsBoundary "$USER_ARN" "cannot remove its boundary"
 expect_decision denied iam:CreatePolicyVersion "$BOUNDARY_ARN" "cannot edit terraform-boundary"
 expect_decision denied iam:CreatePolicyVersion "$SELF_ARN" "cannot edit terraform-iam-self"
+expect_decision denied iam:CreatePolicyVersion "$ROLE_BOUNDARY_ARN" "cannot edit terraform-role-boundary"
+WIKI_ROLE="arn:aws:iam::${ACCOUNT}:role/sirloinbh-wiki-deploy"
+expect_decision denied iam:CreateRole "$WIKI_ROLE" "cannot create a wiki role without the role boundary"
+expect_decision denied iam:CreateRole "$WIKI_ROLE" "cannot create a wiki role with another boundary"   --context-entries "ContextKeyName=iam:PermissionsBoundary,ContextKeyValues=${BOUNDARY_ARN},ContextKeyType=string"
+expect_decision allowed iam:CreateRole "$WIKI_ROLE" "can create a wiki role with the role boundary"   --context-entries "ContextKeyName=iam:PermissionsBoundary,ContextKeyValues=${ROLE_BOUNDARY_ARN},ContextKeyType=string"
+expect_decision denied iam:PutRolePolicy "$WIKI_ROLE" "cannot write the policy of a role without the role boundary"
+expect_decision denied iam:DeleteRolePermissionsBoundary "$WIKI_ROLE" "cannot remove a role's boundary"
 
 say "bootstrap finished"

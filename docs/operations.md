@@ -77,14 +77,15 @@ Create an IAM user only for Terraform and use that user's access key. Since #79 
      ]
    }
    ```
-3. Bootstrap (#79): open AWS CloudShell in the console as the root account or an administrator (any region) and paste:
+3. Bootstrap (#79, #85): open AWS CloudShell in the console as the root account or an administrator (any region) and paste:
    ```bash
    curl -fsSL https://raw.githubusercontent.com/sirloinbh/shared-aws-infrastructure/main/scripts/bootstrap-iam.sh | bash
    ```
-   It prints one `OK ...` line per step and ends with `OK bootstrap finished`; a `FAIL ...` line stops it. Running it again changes only what differs, so it is also how a boundary change reaches AWS. It does three things:
-   - Creates the policy `terraform-boundary` and sets it as the user's permissions boundary. Whatever other policies say, the user can do no more than this: Lightsail, Route 53, Budgets, CloudFront, ACM, S3 buckets named `sirloinbh-*`, SSM parameters under `/sirloinbh/`, and IAM only on the server users `sirloinbh-apps-*`, the wiki deploy role `sirloinbh-wiki-*` and the GitHub OIDC provider, the `terraform-*` policies, and itself. It cannot assume roles, and it cannot attach any policy whose name does not start with `terraform-`.
+   It prints one `OK ...` line per step and ends with `OK bootstrap finished`; a `FAIL ...` line stops it. Running it again changes only what differs, so it is also how a boundary change reaches AWS. It does four things:
+   - Creates the policy `terraform-role-boundary` (#85): the most any role that Terraform creates can do, namely list, read, upload, and delete files in the `sirloinbh-wiki-site-*` buckets and clear a CloudFront cache (`cloudfront:CreateInvalidation`). It is what the wiki deploy role needs, nothing more.
+   - Creates the policy `terraform-boundary` and sets it as the user's permissions boundary. Whatever other policies say, the user can do no more than this: Lightsail, Route 53, Budgets, CloudFront, ACM, S3 buckets named `sirloinbh-*`, SSM parameters under `/sirloinbh/`, and IAM only on the server users `sirloinbh-apps-*`, the wiki deploy role `sirloinbh-wiki-*` and the GitHub OIDC provider, the `terraform-*` policies, and itself. It cannot assume roles, and it cannot attach any policy whose name does not start with `terraform-`. It can create a `sirloinbh-wiki-*` role, write a role's inline policy, or set a role's boundary only when that boundary is `terraform-role-boundary`, and it can never remove a role's boundary (#85). So a role with a wide inline policy, or one that trusts another repository, still can do no more than the role boundary allows.
    - Creates the policy `terraform-iam-self` and attaches it to the user: create, version, and delete policies named `terraform-*`, attach and detach them only on `user/terraform-workout`, and read its own user.
-   - Both policies deny removing or changing the boundary and editing `terraform-boundary` or `terraform-iam-self`. The last lines check this with the IAM policy simulator.
+   - The policies deny removing or changing the user's boundary and editing `terraform-boundary`, `terraform-iam-self`, or `terraform-role-boundary`. The last lines check this, and the role rules above, with the IAM policy simulator.
 4. The other managed policies are Terraform resources in `iam.tf`; each document is `iam-policies/<name>.json`. They are managed policies, not inline ones, because all inline policies of one user share a 2,048-character limit, which the policy in step 2 nearly fills.
 
    | Policy | Since | What it lets Terraform do |
@@ -241,7 +242,7 @@ aws lightsail get-instance-port-states @p --instance-name workout-memo-app --out
 | `aws_cloudfront_distribution.wiki`, `aws_cloudfront_origin_access_control.wiki`, `aws_cloudfront_function.wiki` | Possible (distribution ID, access control ID, function name) | import. A new distribution would get another address, so the DNS records would change |
 | `aws_acm_certificate.wiki`, `aws_route53_record.wiki*` | Possible (certificate ARN in us-east-1; `zone ID_name_type`) | import. `aws_acm_certificate_validation.wiki` cannot be imported; apply creates it without changing AWS |
 | `aws_iam_openid_connect_provider.github`, `aws_iam_role.wiki_deploy`, `aws_iam_role_policy.wiki_deploy` | Possible (provider ARN, role name, `role:policy name`) | import |
-| `aws_iam_policy.terraform[*]`, `aws_iam_user_policy_attachment.terraform[*]` (#79) | Possible (policy ARN, `user/policy ARN`) | The `import` blocks in `iam.tf` adopt them on the next plan. `terraform-boundary` and `terraform-iam-self` are not in the state; they stay as the bootstrap (section 1-2, step 3) made them |
+| `aws_iam_policy.terraform[*]`, `aws_iam_user_policy_attachment.terraform[*]` (#79) | Possible (policy ARN, `user/policy ARN`) | The `import` blocks in `iam.tf` adopt them on the next plan. `terraform-boundary`, `terraform-iam-self`, and `terraform-role-boundary` are not in the state; they stay as the bootstrap (section 1-2, step 3) made them |
 
 ### 4-3. Procedure
 
@@ -414,6 +415,15 @@ The first `wiki` run failed with "Not authorized to perform sts:AssumeRoleWithWe
   ```
 - If the notes move to another repository, set `wiki_oidc_subject_prefix` in `terraform.tfvars` to that repository's prefix. The variable accepts only the immutable form `repo:<owner>@<owner ID>/<repo>@<repo ID>`.
 - Applying the change: `plan` must show only `aws_iam_role.wiki_deploy` updated in place (`0 to add, 1 to change, 0 to destroy`). After the apply, re-run the `wiki` workflow (12-1 step 5).
+
+### 12-4. Deploy role boundary (#85)
+
+The deploy role carries the permissions boundary `terraform-role-boundary` (`permissions_boundary` in `wiki.tf`), which the bootstrap makes (section 1-2, step 3). Whatever inline policy or trust policy Terraform writes, the role can only list, read, upload, and delete files in the `sirloinbh-wiki-site-*` buckets and clear a CloudFront cache. The Terraform user cannot create a `sirloinbh-wiki-*` role or write its policy without that boundary, and cannot remove it.
+
+- **Order**: merge the PR, run the bootstrap again (section 1-2, step 3) so `terraform-role-boundary` exists and `terraform-boundary` has the new rules, then plan and apply. Before the bootstrap, the apply fails with AccessDenied.
+- **The plan** shows, for this change, two in-place updates and nothing else: `aws_iam_policy.terraform["terraform-wiki-site"]` (adds `iam:PutRolePermissionsBoundary`) and `aws_iam_role.wiki_deploy` (adds `permissions_boundary`), `0 to add, 2 to change, 0 to destroy`. The role waits for the policy. If the role update still fails with AccessDenied because IAM has not spread the new policy version yet, wait a minute and apply again.
+- **After the apply**, re-run the `wiki` workflow (12-1 step 5); it must upload and clear the cache as before.
+- **A new permission for the deploy role** needs it in both places: the inline policy in `wiki.tf` and `terraform-role-boundary` in `scripts/bootstrap-iam.sh` (then the bootstrap again).
 
 ## 13. Recover the server from a snapshot (#64)
 
