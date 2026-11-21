@@ -4,15 +4,15 @@
 # Run it in AWS CloudShell of the personal account, signed in as root or an administrator, not as
 # terraform-workout. It is safe to run again: each step changes AWS only when it differs from below.
 #
-#   1. Policy `terraform-boundary`: the most terraform-workout can ever do. It is set as the user's
+#   1. Policy `terraform-role-boundary`: the most a role that terraform-workout creates can ever do
+#      (upload the wiki site and clear its cache). terraform-boundary lets the user create a role,
+#      write its policy, or set its boundary only with this boundary, and never remove it (#85).
+#   2. Policy `terraform-boundary`: the most terraform-workout can ever do. It is set as the user's
 #      permissions boundary, so every policy Terraform writes for itself is capped by it.
-#   2. Policy `terraform-iam-self`: lets terraform-workout create, version and delete policies named
+#   3. Policy `terraform-iam-self`: lets terraform-workout create, version and delete policies named
 #      `terraform-*` and attach them only to itself.
-#   3. Policy `terraform-role-boundary`: the most a role that terraform-workout creates can ever do
-#      (upload the wiki site and clear its cache). terraform-boundary lets the user create a role, or
-#      write its policy, only when the role carries this boundary, and never remove it (#85).
-#   All three deny changing the boundaries and editing these three policies, so Terraform cannot
-#   widen either cap.
+#   All three are guarded: the user cannot edit or delete them or remove its own boundary, so
+#   Terraform cannot widen either cap.
 set -euo pipefail
 export AWS_PAGER=""
 
