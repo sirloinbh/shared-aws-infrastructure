@@ -13,14 +13,15 @@ Resources still carry the `workout-memo-*` prefix (`var.project`) because the se
 
 ```sh
 cp terraform.tfvars.example terraform.tfvars   # enter personal values; excluded from git
-terraform init
+cp state.tfbackend.example state.tfbackend     # state bucket name and profile; excluded from git
+terraform init "-backend-config=state.tfbackend"
 terraform plan "-out=deploy.tfplan"
 terraform apply deploy.tfplan
 ```
 
 - If the account of the current credentials differs from `expected_account_id`, the plan fails. This prevents applying with a company profile.
 - `user_data` runs only on the first boot. Changing it does not recreate the existing instance (`ignore_changes`).
-- Terraform state and `terraform.tfvars` are not stored in git. There is no remote backend, so back them up outside the repo after each apply.
+- The Terraform state lives in a versioned S3 bucket with a lock file (S3 backend, Terraform 1.10 or later). In a new account, create that bucket first ([operations doc](docs/operations.md) 3-2). `terraform.tfvars` and `state.tfbackend` are not stored in git; back them up outside the repo when you change them.
 - The budget alert is not a spending cap.
 - Terraform manages its own `terraform-*` IAM policies (`iam.tf`, `iam-policies/`), capped by a permissions boundary that only an administrator can change. The one-time CloudShell bootstrap is `scripts/bootstrap-iam.sh` ([operations doc](docs/operations.md) section 1-2).
 

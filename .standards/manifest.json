@@ -1,5 +1,5 @@
 {
-  "centralSha": "060e0d50766fa2a1dbd65d4dd13a8fd52193adbb",
+  "centralSha": "4c11008968b79cf60482211268c81af655908391",
   "profile": "infra",
   "project": null,
   "files": {
@@ -153,10 +153,20 @@
       "sha256": "c398cc92f1aa987cf1349cc64a35ef31e89e0104e8967ff9b2b4edc63fd42708",
       "source": "templates/common/.vscode/settings.json.tmpl"
     },
+    "AGENTS.md": {
+      "mode": "full",
+      "sha256": "42f3842099d77ad2cc8fca322045972dde1906deb9e69ef316f1260211a5fc44",
+      "source": "templates/infra/AGENTS.md.tmpl"
+    },
     "apps.json": {
       "mode": "full",
       "sha256": "d8e845f3054e5a3ab8bb7c277954ad3c6d6a7035694facec17b204a480ef8a04",
       "source": "scripts/lib/generated.mjs"
+    },
+    "CLAUDE.md": {
+      "mode": "full",
+      "sha256": "f44752fd4b2eb8b0813cfc2544b9a4d263942774021495afc3c2ddbb59628971",
+      "source": "templates/infra/CLAUDE.md.tmpl"
     },
     "skills/orca-lanes/SKILL.md": {
       "mode": "full",

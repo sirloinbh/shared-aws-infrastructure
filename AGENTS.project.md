@@ -14,7 +14,7 @@ These rules apply to this repo only. The common procedure is in [AGENTS.md](AGEN
 - If the plan has a replacement (`-/+`) or a deletion, do not apply; report the cause and the impact first. Recreating the static IP changes the public address.
 - `user_data` is `ignore_changes`. A change does not reach the existing server, so make any needed change for the existing server with the app repo's deploy script.
 - Raising the provider version saves the state in a new format that cannot be undone. Merge the version-change PR first, then apply.
-- There is no remote backend. The state lives only in this folder on the PC that applied, so back it up outside the repo after each apply. If it is lost, follow the import procedure in the [operations doc](docs/operations.md).
+- The state lives in the S3 backend (`backend "s3"` in `versions.tf`, bucket in `state.tf`, lock file with `use_lockfile`). Run `terraform init "-backend-config=state.tfbackend"` with the git-ignored settings file. Do not commit `*.tfbackend` or remove `prevent_destroy` from the state bucket. Restoring an earlier state and the import procedure are in the [operations doc](docs/operations.md) sections 3 and 4.
 
 ## Versions
 
