@@ -2,78 +2,53 @@
 # stores each upload under exercises/<exercise id>/<uuid>.<ext> and reads and deletes it by key.
 # Versioning keeps a deleted or overwritten file for var.app_file_recovery_days (user decision,
 # 2026-11-17), so a delete in the app can be undone by hand.
-resource "aws_s3_bucket" "study_log_files" {
-  bucket     = "sirloinbh-study-log-files-${data.aws_caller_identity.current.account_id}"
+# Current files stay until the app deletes them; only earlier versions and delete markers expire.
+module "study_log_files" {
+  source     = "./modules/private_bucket"
+  name       = "sirloinbh-study-log-files-${data.aws_caller_identity.current.account_id}"
   tags       = local.tags
   depends_on = [terraform_data.account_guard]
-}
-
-resource "aws_s3_bucket_public_access_block" "study_log_files" {
-  bucket                  = aws_s3_bucket.study_log_files.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_ownership_controls" "study_log_files" {
-  bucket = aws_s3_bucket.study_log_files.id
-  rule {
-    object_ownership = "BucketOwnerEnforced"
+  lifecycle_rule = {
+    id                    = "expire-deleted-files"
+    noncurrent_days       = var.app_file_recovery_days
+    expire_delete_markers = true
   }
 }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "study_log_files" {
-  bucket = aws_s3_bucket.study_log_files.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
+# Moved into modules/private_bucket (#80); these keep the existing bucket and its settings.
+moved {
+  from = aws_s3_bucket.study_log_files
+  to   = module.study_log_files.aws_s3_bucket.this
 }
 
-resource "aws_s3_bucket_versioning" "study_log_files" {
-  bucket = aws_s3_bucket.study_log_files.id
-  versioning_configuration {
-    status = "Enabled"
-  }
+moved {
+  from = aws_s3_bucket_public_access_block.study_log_files
+  to   = module.study_log_files.aws_s3_bucket_public_access_block.this
 }
 
-# Current files stay until the app deletes them; only earlier versions and delete markers expire.
-resource "aws_s3_bucket_lifecycle_configuration" "study_log_files" {
-  bucket     = aws_s3_bucket.study_log_files.id
-  depends_on = [aws_s3_bucket_versioning.study_log_files]
-  rule {
-    id     = "expire-deleted-files"
-    status = "Enabled"
-    filter {}
-    noncurrent_version_expiration {
-      noncurrent_days = var.app_file_recovery_days
-    }
-    expiration {
-      expired_object_delete_marker = true
-    }
-    abort_incomplete_multipart_upload {
-      days_after_initiation = 1
-    }
-  }
+moved {
+  from = aws_s3_bucket_ownership_controls.study_log_files
+  to   = module.study_log_files.aws_s3_bucket_ownership_controls.this
 }
 
-# HTTPS only.
-resource "aws_s3_bucket_policy" "study_log_files" {
-  bucket     = aws_s3_bucket.study_log_files.id
-  depends_on = [aws_s3_bucket_public_access_block.study_log_files]
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Sid       = "DenyInsecureTransport"
-      Effect    = "Deny"
-      Principal = "*"
-      Action    = "s3:*"
-      Resource  = [aws_s3_bucket.study_log_files.arn, "${aws_s3_bucket.study_log_files.arn}/*"]
-      Condition = { Bool = { "aws:SecureTransport" = "false" } }
-    }]
-  })
+moved {
+  from = aws_s3_bucket_server_side_encryption_configuration.study_log_files
+  to   = module.study_log_files.aws_s3_bucket_server_side_encryption_configuration.this
+}
+
+moved {
+  from = aws_s3_bucket_versioning.study_log_files
+  to   = module.study_log_files.aws_s3_bucket_versioning.this[0]
+}
+
+moved {
+  from = aws_s3_bucket_lifecycle_configuration.study_log_files
+  to   = module.study_log_files.aws_s3_bucket_lifecycle_configuration.this
+}
+
+moved {
+  from = aws_s3_bucket_policy.study_log_files
+  to   = module.study_log_files.aws_s3_bucket_policy.this
 }
 
 # The server's identity for these files: get, put and delete objects, which is all the app calls.
@@ -97,13 +72,13 @@ resource "aws_iam_user_policy" "study_log_files" {
         Sid      = "Objects"
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-        Resource = "${aws_s3_bucket.study_log_files.arn}/*"
+        Resource = "${module.study_log_files.arn}/*"
       },
       {
         Sid      = "MissingIsNotFound"
         Effect   = "Allow"
         Action   = "s3:ListBucket"
-        Resource = aws_s3_bucket.study_log_files.arn
+        Resource = module.study_log_files.arn
       },
     ]
   })

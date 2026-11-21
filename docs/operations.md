@@ -321,11 +321,11 @@ aws lightsail get-instance-port-states @p --instance-name workout-memo-app --out
 | `aws_lightsail_key_pair.deploy` | Not possible | Delete the existing key pair in the console and create a new one with apply |
 | `aws_lightsail_instance_public_ports.app` | Not possible | apply overwrites it with the same rules |
 | `terraform_data.account_guard` | Not applicable | apply creates it anew (nothing is created in AWS) |
-| `aws_s3_bucket.backups` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the copies |
-| `aws_s3_bucket.study_log_files` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the files |
-| `aws_s3_bucket.terraform_state` and its 6 bucket settings (public access block, ownership, encryption, versioning, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew; it has `prevent_destroy` and holds every earlier state |
+| `module.backups` (the bucket and its 6 settings in `modules/private_bucket`: public access block, ownership, encryption, `versioning[0]`, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the copies |
+| `module.study_log_files` (the bucket and its 6 settings: public access block, ownership, encryption, `versioning[0]`, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew, because deleting the bucket also deletes the files |
+| `module.terraform_state` (the bucket and its 6 settings: public access block, ownership, encryption, `versioning[0]`, lifecycle, policy) | Possible (bucket name) | import. Do not create it anew; it has `prevent_destroy` and holds every earlier state |
 | `aws_iam_user.*`, `aws_iam_user_policy.*` | Possible (user name, `user:policy name`) | import |
-| `aws_s3_bucket.wiki` and its 5 bucket settings | Possible (bucket name) | import, or delete the bucket and let apply create it; the next deploy uploads the site again |
+| `module.wiki` (the bucket and its 5 settings; no versioning) | Possible (bucket name) | import, or delete the bucket and let apply create it; the next deploy uploads the site again |
 | `aws_cloudfront_distribution.wiki`, `aws_cloudfront_origin_access_control.wiki`, `aws_cloudfront_function.wiki` | Possible (distribution ID, access control ID, function name) | import. A new distribution would get another address, so the DNS records would change |
 | `aws_acm_certificate.wiki`, `aws_route53_record.wiki*` | Possible (certificate ARN in us-east-1; `zone ID_name_type`) | import. `aws_acm_certificate_validation.wiki` cannot be imported; apply creates it without changing AWS |
 | `aws_iam_openid_connect_provider.github`, `aws_iam_role.wiki_deploy`, `aws_iam_role_policy.wiki_deploy` | Possible (provider ARN, role name, `role:policy name`) | import |
@@ -407,7 +407,7 @@ aws lightsail put-alarm --profile workout-personal --alarm-name workout-memo-sta
 
 Running `terraform destroy` deletes the instance, static IP, firewall, and budget, and the DB and dumps inside the server go with them. Bring the backups you need to your PC first (the app repo doc). Automatic snapshots can remain after the instance is deleted and may keep costing money, so check them in the Lightsail console.
 
-The Terraform state bucket has `prevent_destroy` (#63), so `terraform destroy` stops with an error while it is in the configuration. For a full teardown, first remove that line in a local, uncommitted copy. Also move the state back to a local file first (remove the `backend` block in the same copy, then `terraform init -migrate-state`), or the destroy deletes the bucket that holds the state it is writing to.
+Every S3 bucket comes from `modules/private_bucket`, which has `prevent_destroy` (#63, #80), so `terraform destroy` stops with an error while the buckets are in the configuration. For a full teardown, first remove that line from `modules/private_bucket/main.tf` in a local, uncommitted copy, and empty the buckets you no longer need. Also move the state back to a local file first (remove the `backend` block in the same copy, then `terraform init -migrate-state`), or the destroy deletes the bucket that holds the state it is writing to.
 
 ## 10. Creating the server keys (#7, #8)
 
@@ -486,7 +486,7 @@ Lightsail cannot change a running instance's plan. Changing `bundle_id` alone ma
 - **How it stays private**: the function runs before the cache on every request, so a cached page is never served without the password. The bucket blocks public access and lets only this distribution read it.
 - **Limits**: basic authentication has no lockout, so use a long random password. The hash is in the function code and in the state; someone who can read them can test password guesses offline.
 - **A page shows old content**: the deploy workflow clears the CloudFront cache at the end. To do it by hand: `aws cloudfront create-invalidation --profile workout-personal --distribution-id <wiki_distribution_id> --paths "/*"`.
-- **Teardown**: `terraform destroy` fails while the bucket has files. Empty it first: `aws s3 rm s3://<wiki_bucket> --recursive --profile workout-personal`.
+- **Teardown**: the bucket has `prevent_destroy` like every bucket here (section 9), and `terraform destroy` also fails while the bucket has files. Empty it first: `aws s3 rm s3://<wiki_bucket> --recursive --profile workout-personal`.
 
 ## 13. Recover the server from a snapshot (#64)
 
