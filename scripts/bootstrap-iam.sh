@@ -165,6 +165,9 @@ upsert_policy terraform-role-boundary "$ROLE_BOUNDARY"
 # --- 1b. The server user boundary --------------------------------------------------------------
 # What the four server users need together (#88), and nothing else: the inline policies in backup.tf,
 # dns.tf, secrets.tf and files.tf. A server key can do no more, whatever inline policy Terraform writes.
+# The app keys are SecureString parameters under the AWS managed key alias/aws/ssm. Its key policy
+# allows any principal of the account through SSM (Principal "*"), which a permissions boundary
+# still caps, so the boundary must allow kms:Decrypt through SSM or GetParameter fails to decrypt.
 ZONE_ID=$(aws route53 list-hosted-zones-by-name --dns-name "${ROOT_DOMAIN}." \
   --query "HostedZones[?Name=='${ROOT_DOMAIN}.' && Config.PrivateZone==\`false\`].Id | [0]" --output text)
 case "$ZONE_ID" in
@@ -214,6 +217,13 @@ SERVER_USER_BOUNDARY=$(cat <<EOF
       "Effect": "Allow",
       "Action": "ssm:GetParameter",
       "Resource": "arn:aws:ssm:${REGION}:${ACCOUNT}:parameter/sirloinbh/*"
+    },
+    {
+      "Sid": "DecryptAppKeysThroughSsm",
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "arn:aws:kms:${REGION}:${ACCOUNT}:key/*",
+      "Condition": { "StringEquals": { "kms:ViaService": "ssm.${REGION}.amazonaws.com" } }
     },
     {
       "Sid": "StudyLogFiles",
@@ -471,6 +481,9 @@ expect_server_user_decision denied route53:ChangeResourceRecordSets "$ZONE_ARN" 
   --context-entries "${RECORD_NAMES},ContextKeyValues=${ROOT_DOMAIN}" "${RECORD_TYPES},ContextKeyValues=A"
 expect_server_user_decision allowed ssm:GetParameter "arn:aws:ssm:${REGION}:${ACCOUNT}:parameter/sirloinbh/shared/x" "can read an app key"
 expect_server_user_decision denied ssm:PutParameter "arn:aws:ssm:${REGION}:${ACCOUNT}:parameter/sirloinbh/shared/x" "cannot write an app key"
+KMS_KEY="arn:aws:kms:${REGION}:${ACCOUNT}:key/00000000-0000-0000-0000-000000000000"
+expect_server_user_decision allowed kms:Decrypt "$KMS_KEY" "can decrypt an app key through SSM"   --context-entries "ContextKeyName=kms:ViaService,ContextKeyValues=ssm.${REGION}.amazonaws.com,ContextKeyType=string"
+expect_server_user_decision denied kms:Decrypt "$KMS_KEY" "cannot decrypt outside SSM"
 expect_server_user_decision allowed s3:DeleteObject "arn:aws:s3:::${FILES_BUCKET}/x" "can delete a study-log file"
 expect_server_user_decision allowed s3:ListBucket "arn:aws:s3:::${FILES_BUCKET}" "can list the study-log files"
 expect_server_user_decision denied s3:PutBucketVersioning "arn:aws:s3:::${FILES_BUCKET}" "cannot change the study-log files bucket"
