@@ -17,9 +17,10 @@ locals {
 
 # The server's read-only identity. Its access key is made in the console (docs/operations.md).
 resource "aws_iam_user" "secrets_reader" {
-  name       = "${local.shared_prefix}-secrets-reader"
-  tags       = local.tags
-  depends_on = [terraform_data.account_guard]
+  name                 = "${local.shared_prefix}-secrets-reader"
+  permissions_boundary = local.terraform_server_user_boundary
+  tags                 = local.tags
+  depends_on           = [terraform_data.account_guard]
 }
 
 # A SecureString under the AWS managed key (alias/aws/ssm) is decrypted through SSM, so

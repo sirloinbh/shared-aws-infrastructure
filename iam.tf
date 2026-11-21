@@ -16,6 +16,9 @@ locals {
   # The boundary every role that Terraform creates must carry (#85). The bootstrap makes it, and
   # terraform-boundary refuses to create a role, or write its policy, without it.
   terraform_role_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/terraform-role-boundary"
+  # The boundary every server user (sirloinbh-apps-*) must carry (#88). The bootstrap makes it, and
+  # terraform-boundary refuses to create a server user, or write its inline policy, without it.
+  terraform_server_user_boundary = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/terraform-server-user-boundary"
 }
 
 resource "aws_iam_policy" "terraform" {
