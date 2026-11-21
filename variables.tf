@@ -93,8 +93,17 @@ variable "wiki_auth_sha256" {
     error_message = "Enter 64 lower-case hex characters (docs/operations.md section 12)."
   }
 }
-variable "wiki_repository" {
+# The repository uses GitHub's immutable OIDC subject, which names the owner and repository by
+# their IDs as well as their names. A repository renamed later, or deleted and re-created with the
+# same name, gets a new ID and so cannot assume the deploy role (docs/operations.md section 12-3).
+# The IDs are public, not secrets.
+variable "wiki_oidc_subject_prefix" {
   type        = string
-  default     = "sirloinbh/develop-skill"
-  description = "GitHub repository whose main-branch workflow may deploy the wiki."
+  default     = "repo:sirloinbh@129952654/develop-skill@1442840255"
+  description = "OIDC sub prefix of the repository whose main-branch workflow may deploy the wiki: repo:<owner>@<owner ID>/<repo>@<repo ID>."
+
+  validation {
+    condition     = can(regex("^repo:[^@/:]+@[0-9]+/[^@/:]+@[0-9]+$", var.wiki_oidc_subject_prefix))
+    error_message = "Use the immutable form repo:<owner>@<owner ID>/<repo>@<repo ID> (gh api repos/<owner>/<repo>/actions/oidc/customization/sub)."
+  }
 }

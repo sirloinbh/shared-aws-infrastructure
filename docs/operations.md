@@ -488,6 +488,20 @@ Lightsail cannot change a running instance's plan. Changing `bundle_id` alone ma
 - **A page shows old content**: the deploy workflow clears the CloudFront cache at the end. To do it by hand: `aws cloudfront create-invalidation --profile workout-personal --distribution-id <wiki_distribution_id> --paths "/*"`.
 - **Teardown**: `terraform destroy` fails while the bucket has files. Empty it first: `aws s3 rm s3://<wiki_bucket> --recursive --profile workout-personal`.
 
+### 12-3. Deploy role trust: the immutable OIDC subject (#82)
+
+The first `wiki` run failed with "Not authorized to perform sts:AssumeRoleWithWebIdentity". develop-skill uses GitHub's immutable OIDC subject, so the token's `sub` claim names the owner and the repository by name **and ID**: `repo:sirloinbh@129952654/develop-skill@1442840255:ref:refs/heads/main`. The trust policy compared it with the name-only form `repo:sirloinbh/develop-skill:ref:refs/heads/main`, which never matched.
+
+- The trust policy now requires `<wiki_oidc_subject_prefix>:ref:refs/heads/main` (and `aud = sts.amazonaws.com`). The default of `wiki_oidc_subject_prefix` is the prefix above; the IDs are public, not secrets.
+- Why IDs: a repository that is renamed, or deleted and re-created with the same name, gets a new ID, so it cannot assume the role.
+- Read the prefix of a repository with the personal GitHub account. Use `sub_claim_prefix` when `use_immutable_subject` is `true`:
+  ```powershell
+  gh api repos/sirloinbh/develop-skill/actions/oidc/customization/sub
+  # {"use_default":true,"use_immutable_subject":true,"sub_claim_prefix":"repo:sirloinbh@129952654/develop-skill@1442840255"}
+  ```
+- If the notes move to another repository, set `wiki_oidc_subject_prefix` in `terraform.tfvars` to that repository's prefix. The variable accepts only the immutable form `repo:<owner>@<owner ID>/<repo>@<repo ID>`.
+- Applying the change: `plan` must show only `aws_iam_role.wiki_deploy` updated in place (`0 to add, 1 to change, 0 to destroy`). After the apply, re-run the `wiki` workflow (12-1 step 5).
+
 ## 13. Recover the server from a snapshot (#64)
 
 The Lightsail snapshot is the only recovery path for the whole server (user decision 2026-11-21). The server holds every app, shared-auth, shared-ai, the nginx proxy, the certbot certificates, the shared `.env`, and the timers, and no repo can rebuild them all; `user-data.sh` gives a new instance only the host baseline. Use this when the instance is broken or lost. To change the plan size instead, use section 11.
