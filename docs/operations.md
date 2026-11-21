@@ -38,12 +38,12 @@ winget install --id Hashicorp.Terraform --version <terraform.cli in versions.jso
 winget install --id Amazon.AWSCLI --exact
 ```
 
-### 1-2. AWS credentials (do not create a root key)
+### 1-2. AWS credentials and the Terraform user's permissions (do not create a root key)
 
-Create an IAM user only for Terraform and use that user's access key.
+Create an IAM user only for Terraform and use that user's access key. Since #79 Terraform manages that user's own `terraform-*` policies, inside a permissions boundary that only the account administrator can change. Steps 1-3, 5, and 6 are done by hand, once.
 
-1. Sign in to the console as the root account, then go to IAM → Users → Create user. Example name: `terraform-workout`. Do not give console access.
-2. Permissions tab → Add permissions → Create inline policy → JSON (if you already created the user, replace the existing inline policy with this content. `BackupBucket` and `ServerUsers` were added in #7 and #8):
+1. Sign in to the console as the root account, then go to IAM → Users → Create user. Name: `terraform-workout` (`iam.tf` and `scripts/bootstrap-iam.sh` use this name). Do not give console access.
+2. Permissions tab → Add permissions → Create inline policy → JSON (if you already created the user, replace the existing inline policy with this content. `BackupBucket` and `ServerUsers` were added in #7 and #8). This inline policy stays outside Terraform: the user cannot edit its own inline policies.
    ```json
    {
      "Version": "2012-10-17",
@@ -77,116 +77,28 @@ Create an IAM user only for Terraform and use that user's access key.
      ]
    }
    ```
-3. Route 53 (#33): IAM → Policies → Create policy → JSON, name it `terraform-route53-dns`, then on the user: Add permissions → Attach policies directly → that policy. It is a managed policy because all inline policies of one user share a 2,048-character limit, which the policy above nearly fills.
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Sid": "Route53Read",
-         "Effect": "Allow",
-         "Action": [
-           "route53:ListHostedZones", "route53:GetHostedZone", "route53:ListTagsForResource",
-           "route53:ListResourceRecordSets", "route53:GetChange"
-         ],
-         "Resource": "*"
-       },
-       {
-         "Sid": "Route53Records",
-         "Effect": "Allow",
-         "Action": "route53:ChangeResourceRecordSets",
-         "Resource": "arn:aws:route53:::hostedzone/*"
-       }
-     ]
-   }
+3. Bootstrap (#79): open AWS CloudShell in the console as the root account or an administrator (any region) and paste:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/sirloinbh/shared-aws-infrastructure/main/scripts/bootstrap-iam.sh | bash
    ```
-4. App files (#53): IAM → Policies → Create policy → JSON, name it `terraform-app-files`, then attach it to the user as in step 3. It is a separate managed policy for the same 2,048-character reason.
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Sid": "AppFileBuckets",
-         "Effect": "Allow",
-         "Action": "s3:*",
-         "Resource": ["arn:aws:s3:::sirloinbh-study-log-files-*", "arn:aws:s3:::sirloinbh-study-log-files-*/*"]
-       }
-     ]
-   }
-   ```
-4b. Server address (#69): IAM → Policies → Create policy → JSON, name it `terraform-server-ip`, and attach it to the user as in step 3. It lets Terraform manage the one parameter that holds the static IP, and lets the PC read it (project-standards `server-ip` and `server-ssh`). Without it `terraform apply` of the parameter fails with AccessDenied.
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Sid": "ServerIpParameter",
-         "Effect": "Allow",
-         "Action": ["ssm:PutParameter", "ssm:GetParameter", "ssm:DeleteParameter", "ssm:AddTagsToResource", "ssm:RemoveTagsFromResource", "ssm:ListTagsForResource"],
-         "Resource": "arn:aws:ssm:ap-northeast-2:*:parameter/sirloinbh/shared/server-static-ip"
-       },
-       { "Sid": "ServerIpParameterRead", "Effect": "Allow", "Action": "ssm:DescribeParameters", "Resource": "*" }
-     ]
-   }
-   ```
-4c. Terraform state (#63): IAM → Policies → Create policy → JSON, name it `terraform-state`, and attach it to the user as in step 3. It lets Terraform create the state bucket and, after the move in section 3, read and write the state and its lock file. Without it the apply of the bucket fails with AccessDenied.
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Sid": "StateBucket",
-         "Effect": "Allow",
-         "Action": "s3:*",
-         "Resource": ["arn:aws:s3:::sirloinbh-terraform-state-*", "arn:aws:s3:::sirloinbh-terraform-state-*/*"]
-       }
-     ]
-   }
-   ```
-4d. Study notes wiki (develop-skill#30): IAM → Policies → Create policy → JSON, name it `terraform-wiki-site`, then attach it to the user as in step 3.
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Sid": "WikiBucket",
-         "Effect": "Allow",
-         "Action": "s3:*",
-         "Resource": ["arn:aws:s3:::sirloinbh-wiki-site-*", "arn:aws:s3:::sirloinbh-wiki-site-*/*"]
-       },
-       { "Sid": "CloudFront", "Effect": "Allow", "Action": "cloudfront:*", "Resource": "*" },
-       {
-         "Sid": "Certificates",
-         "Effect": "Allow",
-         "Action": [
-           "acm:RequestCertificate", "acm:DescribeCertificate", "acm:GetCertificate", "acm:DeleteCertificate",
-           "acm:ListCertificates", "acm:ListTagsForCertificate", "acm:AddTagsToCertificate", "acm:RemoveTagsFromCertificate"
-         ],
-         "Resource": "*"
-       },
-       {
-         "Sid": "GitHubOidcProvider",
-         "Effect": "Allow",
-         "Action": [
-           "iam:CreateOpenIDConnectProvider", "iam:GetOpenIDConnectProvider", "iam:DeleteOpenIDConnectProvider",
-           "iam:TagOpenIDConnectProvider", "iam:UntagOpenIDConnectProvider", "iam:ListOpenIDConnectProviders",
-           "iam:AddClientIDToOpenIDConnectProvider", "iam:UpdateOpenIDConnectProviderThumbprint"
-         ],
-         "Resource": "*"
-       },
-       {
-         "Sid": "WikiDeployRole",
-         "Effect": "Allow",
-         "Action": [
-           "iam:CreateRole", "iam:GetRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
-           "iam:TagRole", "iam:UntagRole", "iam:ListRolePolicies", "iam:ListAttachedRolePolicies",
-           "iam:ListInstanceProfilesForRole", "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy"
-         ],
-         "Resource": "arn:aws:iam::*:role/sirloinbh-wiki-*"
-       }
-     ]
-   }
-   ```
+   It prints one `OK ...` line per step and ends with `OK bootstrap finished`; a `FAIL ...` line stops it. Running it again changes only what differs, so it is also how a boundary change reaches AWS. It does three things:
+   - Creates the policy `terraform-boundary` and sets it as the user's permissions boundary. Whatever other policies say, the user can do no more than this: Lightsail, Route 53, Budgets, CloudFront, ACM, S3 buckets named `sirloinbh-*`, SSM parameters under `/sirloinbh/`, and IAM only on the server users `sirloinbh-apps-*`, the wiki deploy role `sirloinbh-wiki-*` and the GitHub OIDC provider, the `terraform-*` policies, and itself. It cannot assume roles, and it cannot attach any policy whose name does not start with `terraform-`.
+   - Creates the policy `terraform-iam-self` and attaches it to the user: create, version, and delete policies named `terraform-*`, attach and detach them only on `user/terraform-workout`, and read its own user.
+   - Both policies deny removing or changing the boundary and editing `terraform-boundary` or `terraform-iam-self`. The last lines check this with the IAM policy simulator.
+4. The other managed policies are Terraform resources in `iam.tf`; each document is `iam-policies/<name>.json`. They are managed policies, not inline ones, because all inline policies of one user share a 2,048-character limit, which the policy in step 2 nearly fills.
+
+   | Policy | Since | What it lets Terraform do |
+   |---|---|---|
+   | `terraform-route53-dns` | #33 | Read the hosted zone and change its records |
+   | `terraform-app-files` | #53 | Manage the study-log files bucket |
+   | `terraform-server-ip` | #69 | Manage the parameter that holds the static IP, and let the PC read it (project-standards `server-ip` and `server-ssh`) |
+   | `terraform-state` | #63 | Create the state bucket, and read and write the state and its lock file |
+   | `terraform-wiki-site` | develop-skill#30 | The wiki bucket, CloudFront, its certificate, the GitHub OIDC provider, and the wiki deploy role |
+
+   - **Changing or adding a policy** is a normal PR: edit the JSON file, or add `iam-policies/terraform-<name>.json` and its name to `local.terraform_policies`. Then plan and apply as in section 2 with the `workout-personal` profile. The name must start with `terraform-`.
+   - **A change that needs a service or resource outside the boundary** still fails with AccessDenied after apply. Change the boundary in `scripts/bootstrap-iam.sh` in a PR, and after the merge the user runs step 3 again.
+   - **Adopting the existing policies**: before #79 these five were made by hand in the console. The `import` blocks in `iam.tf` adopt them, so the first plan after the bootstrap shows `10 to import` and no changes for them. If it shows a change to them, do not apply: the JSON file differs from the policy in AWS.
+   - **A brand-new account**, where the five policies do not exist yet: delete the two `import` blocks in `iam.tf`. With the local backend of 3-2, run `terraform apply "-target=aws_iam_user_policy_attachment.terraform"` first so the user gets its policies (including `terraform-state`), then continue with 3-2 and section 2.
 5. Security credentials tab → Create access key → use case "Command Line Interface (CLI)". In the description tag, write which PC it is for.
 6. Register it under a name so it does not mix with the company profile, and check the account.
    ```powershell
@@ -232,7 +144,7 @@ terraform apply deploy.tfplan
 terraform output                      # static_ip, ssh, app_urls, server_ip_parameter, backup_bucket, the server IAM user names
 ```
 
-- What gets created: the SSH key registration, the instance, the static IP and its attachment, the firewall (ports 22, 80, and 443 open only to the allowed IPs), the monthly budget alert, the S3 buckets for DB dump copies and study-log files, the S3 bucket for the Terraform state (#63), the app subdomain records, and four IAM users for the server (section 10).
+- What gets created: the SSH key registration, the instance, the static IP and its attachment, the firewall (ports 22, 80, and 443 open only to the allowed IPs), the monthly budget alert, the S3 buckets for DB dump copies and study-log files, the S3 bucket for the Terraform state (#63), the app subdomain records, four IAM users for the server (section 10), and the Terraform user's own `terraform-*` policies (section 1-2, #79).
 - In a new account the state bucket does not exist yet, so `terraform init` with the backend fails. Create the bucket first as in 3-2.
 - If the plan has a replacement (`-/+`) or a deletion, do not apply. Recreating the static IP changes the public address.
 - `user-data.sh` runs on the first boot. Lightsail runs user_data with `/bin/sh`, so an sh wrapper writes and runs a bash script (`/usr/local/sbin/server-init`). It sets up only the host baseline: the time zone, 2GB of swap, Docker and Compose, and the Docker log limits. It takes a few minutes. Apps, the proxy, certificates, the shared `.env`, and timers are not set up; a lost server comes back from a snapshot (section 13).
@@ -250,7 +162,7 @@ terraform output                      # static_ip, ssh, app_urls, server_ip_para
 
 The bucket was created while the state was still local (#74). Do this once on the PC that has `terraform.tfstate`.
 
-1. Check the tools and rights: `terraform version` is 1.10 or later, and the Terraform user has the `terraform-state` policy (1-2 step 4c).
+1. Check the tools and rights: `terraform version` is 1.10 or later, and the Terraform user has the `terraform-state` policy (1-2 step 4).
 2. Before pulling the backend change (main at the merge of #74, the state still local), apply the bucket if you have not yet, and read its name. If main on your PC already has the `backend "s3"` block, run this step in `git switch --detach <merge commit of #74>` and come back with `git switch main`:
    ```powershell
    terraform plan "-out=deploy.tfplan"   # the state bucket and its 6 settings; nothing to change or destroy
@@ -329,6 +241,7 @@ aws lightsail get-instance-port-states @p --instance-name workout-memo-app --out
 | `aws_cloudfront_distribution.wiki`, `aws_cloudfront_origin_access_control.wiki`, `aws_cloudfront_function.wiki` | Possible (distribution ID, access control ID, function name) | import. A new distribution would get another address, so the DNS records would change |
 | `aws_acm_certificate.wiki`, `aws_route53_record.wiki*` | Possible (certificate ARN in us-east-1; `zone ID_name_type`) | import. `aws_acm_certificate_validation.wiki` cannot be imported; apply creates it without changing AWS |
 | `aws_iam_openid_connect_provider.github`, `aws_iam_role.wiki_deploy`, `aws_iam_role_policy.wiki_deploy` | Possible (provider ARN, role name, `role:policy name`) | import |
+| `aws_iam_policy.terraform[*]`, `aws_iam_user_policy_attachment.terraform[*]` (#79) | Possible (policy ARN, `user/policy ARN`) | The `import` blocks in `iam.tf` adopt them on the next plan. `terraform-boundary` and `terraform-iam-self` are not in the state; they stay as the bootstrap (section 1-2, step 3) made them |
 
 ### 4-3. Procedure
 
@@ -460,7 +373,7 @@ Lightsail cannot change a running instance's plan. Changing `bundle_id` alone ma
 
 ### 12-1. First apply
 
-1. Attach the `terraform-wiki-site` policy to the Terraform user (section 1-2, step 4d).
+1. The Terraform user needs the `terraform-wiki-site` policy (section 1-2, step 4). Since #79 `iam.tf` manages it.
 2. Choose a user name and a password, and compute the hash that the function compares. Run this in PowerShell on your PC; it asks for the password without showing it and prints only the hash.
    ```powershell
    $user = "<user name>"
