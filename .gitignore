@@ -20,3 +20,4 @@ coverage/
 *.tsbuildinfo
 # --- project ---
 *.tfvars
+*.tfbackend
