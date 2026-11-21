@@ -23,7 +23,7 @@ terraform apply deploy.tfplan
 - `user_data` runs only on the first boot. Changing it does not recreate the existing instance (`ignore_changes`).
 - The Terraform state lives in a versioned S3 bucket with a lock file (S3 backend, Terraform 1.10 or later). In a new account, create that bucket first ([operations doc](docs/operations.md) 3-2). `terraform.tfvars` and `state.tfbackend` are not stored in git; back them up outside the repo when you change them.
 - The budget alert is not a spending cap.
-- Terraform manages its own `terraform-*` IAM policies (`iam.tf`, `iam-policies/`), capped by a permissions boundary that only an administrator can change. The one-time CloudShell bootstrap is `scripts/bootstrap-iam.sh` ([operations doc](docs/operations.md) section 1-2).
+- Terraform manages its own `terraform-*` IAM policies (`iam.tf`, `iam-policies/`), capped by a permissions boundary that only an administrator can change; the roles it creates carry a second boundary (#85). The one-time CloudShell bootstrap is `scripts/bootstrap-iam.sh` ([operations doc](docs/operations.md) section 1-2).
 
 ## Recovery
 
