@@ -19,4 +19,4 @@ These rules apply to this repo only. The common procedure is in [AGENTS.md](AGEN
 ## Versions
 
 - The Terraform CLI and Action versions follow `versions.json` in `sirloinbh/project-standards`.
-- The AWS provider is pinned by `versions.tf` and `.terraform.lock.hcl`. When you raise it, pick a version that is at least 14 days past its release, and record the hashes of both platforms with `terraform providers lock -platform=windows_amd64 -platform=linux_amd64`.
+- The AWS provider is pinned by `versions.tf` and `.terraform.lock.hcl`. When you raise it, pick a version that is at least 14 days past its release, and record the hashes of all three platforms (Windows, Linux, and macOS on Apple silicon) with `terraform providers lock -platform=windows_amd64 -platform=linux_amd64 -platform=darwin_arm64`.
