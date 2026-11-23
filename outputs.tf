@@ -20,3 +20,7 @@ output "wiki_url" { value = "https://${local.wiki_domain}/" }
 output "wiki_bucket" { value = module.wiki.bucket }
 output "wiki_distribution_id" { value = aws_cloudfront_distribution.wiki.id }
 output "wiki_deploy_role_arn" { value = aws_iam_role.wiki_deploy.arn }
+# Uptime alert path (#105): AWS_ALERT_TOPIC_ARN, AWS_ALERT_REGION and AWS_ALERT_NAMESPACE for the server's shared .env; the user's access key is made in the console.
+output "uptime_alert_user" { value = aws_iam_user.uptime_alerts.name }
+output "uptime_alert_topic_arn" { value = aws_sns_topic.uptime.arn }
+output "uptime_alert_namespace" { value = local.uptime_namespace }

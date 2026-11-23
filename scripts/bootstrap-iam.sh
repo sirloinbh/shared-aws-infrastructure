@@ -8,7 +8,8 @@
 #      (upload the wiki site and clear its cache). terraform-boundary lets the user create a role,
 #      write its policy, or set its boundary only with this boundary, and never remove it (#85).
 #   1b. Policy `terraform-server-user-boundary`: the most a server user (`sirloinbh-apps-*`) can ever
-#      do (upload backups, write the certbot TXT record, read app keys, use the study-log files). The
+#      do (upload backups, write the certbot TXT record, read app keys, use the study-log files, send the
+#      uptime metrics and publish to the uptime topic). The
 #      same rules as for roles hold for these users and their inline policies (#88).
 #   2. Policy `terraform-boundary`: the most terraform-workout can ever do. It is set as the user's
 #      permissions boundary, so every policy Terraform writes for itself is capped by it.
@@ -23,6 +24,9 @@ TF_USER="terraform-workout"
 # The server users work in this region (var.region) and renew the certificate of this domain (var.root_domain).
 REGION="ap-northeast-2"
 ROOT_DOMAIN="daysofme.com"
+# The uptime alert path (#105, uptime.tf): one metric namespace and one SNS topic name, the same as in uptime.tf.
+UPTIME_NAMESPACE="ProjectStandards/Uptime"
+UPTIME_TOPIC="sirloinbh-uptime-alerts"
 
 say() { printf 'OK %s\n' "$*"; }
 fail() { printf 'FAIL %s\n' "$*" >&2; exit 1; }
@@ -249,6 +253,19 @@ SERVER_USER_BOUNDARY=$(cat <<EOF
       "Effect": "Allow",
       "Action": "s3:ListBucket",
       "Resource": "arn:aws:s3:::${FILES_BUCKET}"
+    },
+    {
+      "Sid": "UptimeMetrics",
+      "Effect": "Allow",
+      "Action": "cloudwatch:PutMetricData",
+      "Resource": "*",
+      "Condition": { "StringEquals": { "cloudwatch:namespace": "${UPTIME_NAMESPACE}" } }
+    },
+    {
+      "Sid": "UptimeSignals",
+      "Effect": "Allow",
+      "Action": "sns:Publish",
+      "Resource": "arn:aws:sns:${REGION}:${ACCOUNT}:${UPTIME_TOPIC}"
     }
   ]
 }
@@ -535,6 +552,13 @@ expect_server_user_decision allowed s3:DeleteObject "arn:aws:s3:::${FILES_BUCKET
 expect_server_user_decision allowed s3:ListBucket "arn:aws:s3:::${FILES_BUCKET}" "can list the study-log files"
 expect_server_user_decision denied s3:PutBucketVersioning "arn:aws:s3:::${FILES_BUCKET}" "cannot change the study-log files bucket"
 expect_server_user_decision denied iam:CreateUser "$SERVER_USER" "cannot use IAM"
+NAMESPACE_KEY="ContextKeyName=cloudwatch:namespace,ContextKeyType=string"
+expect_server_user_decision allowed cloudwatch:PutMetricData "*" "can put uptime metrics"   --context-entries "${NAMESPACE_KEY},ContextKeyValues=${UPTIME_NAMESPACE}"
+expect_server_user_decision denied cloudwatch:PutMetricData "*" "cannot put metrics in another namespace"   --context-entries "${NAMESPACE_KEY},ContextKeyValues=AWS/EC2"
+expect_server_user_decision allowed sns:Publish "arn:aws:sns:${REGION}:${ACCOUNT}:${UPTIME_TOPIC}" "can publish to the uptime topic"
+expect_server_user_decision denied sns:Publish "arn:aws:sns:${REGION}:${ACCOUNT}:other-topic" "cannot publish to another topic"
+expect_server_user_decision denied sns:Subscribe "arn:aws:sns:${REGION}:${ACCOUNT}:${UPTIME_TOPIC}" "cannot subscribe to the uptime topic"
+expect_server_user_decision denied cloudwatch:PutMetricAlarm "arn:aws:cloudwatch:${REGION}:${ACCOUNT}:alarm:sirloinbh-uptime-heartbeat" "cannot change an alarm"
 
 # Alert and guard rail services (#98). The boundary names stay inside sirloinbh-* and workout-memo-*.
 ALERT_TOPIC="arn:aws:sns:${REGION}:${ACCOUNT}:sirloinbh-uptime-alerts"
