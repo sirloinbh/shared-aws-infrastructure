@@ -20,9 +20,11 @@ Run every command in this repo's folder. The profile name in the examples is `wo
 | Study notes wiki (develop-skill#30) | S3 `sirloinbh-wiki-site-<account ID>` (about 25 MB) behind CloudFront at `wiki.daysofme.com`, with a public certificate | under $0.1: CloudFront's free allowance (1 TB and 10 million requests a month) covers one reader, the certificate is free, S3 storage and about 5,000 uploads per deploy cost a few cents |
 | Logs | Docker json-file, 10MB x 3 rotation per container | $0 |
 | AWS Budgets | `monthly_budget_usd`, default $20. Email at 50% and 80% of actual spend and 100% of forecasted spend | Free (a budget used only for alerts) |
+| Cost anomaly detection (#100) | A `SERVICE` monitor and a daily email subscription to `budget_emails`, sent when one service's unexpected spend reaches `cost_anomaly_threshold_usd` (default $5) | Free |
 | Total | | **about $14-15** (plus 10% VAT, about $15-17) |
 
 - The budget alert does not stop spending. It covers the cost of the whole personal account. Keep `monthly_budget_usd` above the monthly total with VAT, or the forecast alert fires every month; check that `terraform.tfvars` does not override it with a lower value.
+- Cost anomaly alert (#100, `cost.tf`): the budget fires late and only on the total, so AWS Cost Anomaly Detection also watches each service and sends a daily email when the unexpected spend is at least `cost_anomaly_threshold_usd`. A leaked key that creates resources shows up first as one service jumping. Before the first apply, run `aws ce get-anomaly-monitors --profile <personal profile>`: an account allows only one dimensional `SERVICE` monitor, so if AWS already made one, import it (`terraform import aws_ce_anomaly_monitor.services <monitor ARN>`) instead of creating a second. After apply, `aws ce get-anomaly-subscriptions` should list the subscription with your email. The `terraform-cost-anomaly` policy gives Terraform the `ce` actions, inside the boundary of #98.
 - Cost sources: [Lightsail pricing](https://aws.amazon.com/lightsail/pricing/), [Budgets pricing](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/). The actual bill follows the prices and taxes at billing time.
 - ECR and CloudWatch Logs are not used. S3 holds the DB dump copies and study-log's files. The user decided to keep an off-server copy instead of leaving a long-lived AWS key on the server (2026-10-27, project-standards#262), and to add a key for study-log's files because the server cannot use an IAM role (2026-11-17, #53). The server has five keys: one that can only upload to the backup bucket, one that can read only the app keys in SSM, one that can only write the certificate challenge record, one that can only read, write and delete study-log's files (section 10), and one that can only send the two uptime metrics and publish to the uptime topic (#105, section 8).
 - Each app is `https://<app>.daysofme.com`, only from allowed IPs. The shared reverse proxy on the server (project-standards#253) takes 80 and 443 and forwards each name to the app's web port on `127.0.0.1`, which is not open in the firewall.
@@ -310,6 +312,14 @@ The server's static IP is also stored in the SSM parameter `/sirloinbh/shared/se
 ## 7. Change the allowed IPs
 
 Add or remove entries in `allowed_cidrs` in `terraform.tfvars`, then run plan and apply. Only the firewall rules change, and the instance stays as it is. Opening to everyone (`/0`) is rejected by variable validation.
+
+### 7-1. CAA record (#103)
+
+`aws_route53_record.caa` (`dns.tf`) puts a CAA record at the zone apex: `0 issue "letsencrypt.org"` and `0 issue "amazon.com"`. Only these two authorities may issue certificates for the domain and its subdomains. Let's Encrypt is the server's certbot (wildcard certificate), and Amazon is the ACM certificate of the wiki (section 12). With no `issuewild` entry, the `issue` entries also cover the wildcard certificate.
+
+- **Plan**: adds only this record (`1 to add`). No `-/+`.
+- **Check after apply**: `nslookup -type=CAA <root_domain>` shows both entries. Then confirm the next certbot renewal (`cert.sh` dry run, project-standards `docs/server-proxy.md`) and ACM renewal still work.
+- **Another authority later**: add one more `0 issue "<ca-domain>"` string to `records` in `dns.tf` and apply, before requesting a certificate from it. If a renewal fails with a CAA error, this record is the first thing to check.
 
 ## 8. Alarms (optional)
 

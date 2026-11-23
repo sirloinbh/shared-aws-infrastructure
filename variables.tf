@@ -112,3 +112,8 @@ variable "uptime_alert_emails" {
   default     = []
   description = "Recipients of the uptime alerts (#105). Empty means the same recipients as budget_emails. Keep them in terraform.tfvars (git-ignored)."
 }
+variable "cost_anomaly_threshold_usd" {
+  type        = number
+  default     = 5
+  description = "Cost anomaly alert (#100): email when one service's unexpected spend (total impact) is at least this many USD."
+}

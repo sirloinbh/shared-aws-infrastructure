@@ -30,6 +30,18 @@ resource "aws_route53_record" "services" {
   depends_on = [terraform_data.account_guard]
 }
 
+# Only Let's Encrypt (certbot on the server) and Amazon (the ACM certificate of the wiki, wiki.tf) may
+# issue certificates for the domain and its subdomains (#103). With no issuewild entry, the issue
+# entries also cover the wildcard certificate. To allow another authority, add its CAA domain here.
+resource "aws_route53_record" "caa" {
+  zone_id    = data.aws_route53_zone.root.zone_id
+  name       = var.root_domain
+  type       = "CAA"
+  ttl        = 300
+  records    = ["0 issue \"letsencrypt.org\"", "0 issue \"amazon.com\""]
+  depends_on = [terraform_data.account_guard]
+}
+
 # certbot on the server renews the wildcard certificate with DNS validation (certbot dns-route53).
 # Its key can only write the one TXT record Let's Encrypt checks. The access key is made in the
 # console (docs/operations.md section 10).
