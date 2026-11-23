@@ -55,6 +55,8 @@ resource "aws_cloudtrail" "audit" {
   include_global_service_events = true
   enable_log_file_validation    = true
   tags                          = local.tags
+  # The module's id output waits only for the bucket; the trail must also wait for its policy.
+  depends_on = [module.cloudtrail_logs]
 
   # Management events only, reads and writes. No data events, so the trail stays free.
   event_selector {
