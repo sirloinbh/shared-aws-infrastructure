@@ -18,6 +18,7 @@ Run every command in this repo's folder. The profile name in the examples is `wo
 | Reading the app keys (#8, #27) | SSM Parameter Store standard parameters, an IAM user | $0 |
 | App subdomains (#33) | Route 53 A records `<app>.daysofme.com` in the zone the domain registration created. The domain and the zone are billed yearly (project-standards `docs/costs.md`) | about $0.50 for the zone, queries under $0.01 |
 | Study notes wiki (develop-skill#30) | S3 `sirloinbh-wiki-site-<account ID>` (about 25 MB) behind CloudFront at `wiki.daysofme.com`, with a public certificate | under $0.1: CloudFront's free allowance (1 TB and 10 million requests a month) covers one reader, the certificate is free, S3 storage and about 5,000 uploads per deploy cost a few cents |
+| Audit trail (#102) | CloudTrail trail `sirloinbh-audit`, management events only, in S3 `sirloinbh-cloudtrail-logs-<account ID>`, logs kept 365 days (section 14) | $0 for the first management-event trail; S3 storage under $0.1 a month for one person's account ($0.025/GB-month, a few MB of logs a month) |
 | Logs | Docker json-file, 10MB x 3 rotation per container | $0 |
 | AWS Budgets | `monthly_budget_usd`, default $20. Email at 50% and 80% of actual spend and 100% of forecasted spend | Free (a budget used only for alerts) |
 | Cost anomaly detection (#100) | A `SERVICE` monitor and a daily email subscription to `budget_emails`, sent when one service's unexpected spend reaches `cost_anomaly_threshold_usd` (default $5) | Free |
@@ -508,3 +509,16 @@ The Lightsail snapshot is the only recovery path for the whole server (user deci
 6. Delete the old instance and manual snapshots you no longer need after about a week, as in section 11 step 8.
 
 If no snapshot is left (for example, the instance and its snapshots were deleted), there is no scripted rebuild: build a server with `terraform apply`, then install each app with its own repo's deploy docs and restore the databases from the S3 dumps.
+
+## 14. Audit trail (CloudTrail, #102)
+
+The account only had the 90-day CloudTrail event history. If a server key leaks, older events are gone. The trail `sirloinbh-audit` (`cloudtrail.tf`) keeps management events (who created, changed or deleted what, and every other control-plane call) in the private S3 bucket `sirloinbh-cloudtrail-logs-<account ID>` (the `cloudtrail_log_bucket` output).
+
+- **What it records**: management events for reads and writes, in all regions, plus global service events (IAM, STS, CloudFront). Log file validation is on, so a changed or deleted log file can be detected. Data events (S3 object reads, Lambda invokes) and Insights are not recorded because they are billed.
+- **Cost**: the first trail that records management events in an account is free. Only S3 storage is paid, under $0.1 a month here. A second management-event trail would be billed, so do not add one. Logs expire after 365 days (`cloudtrail_retention_days`).
+- **Bucket**: it comes from `modules/private_bucket` (no public access, SSE-S3, HTTPS only, no versioning). Its policy lets only the CloudTrail service write, only for this trail (`aws:SourceArn`), under `AWSLogs/<account ID>/`.
+- **Before the plan**: confirm no trail exists, so this one is the free first trail: `aws cloudtrail describe-trails --profile workout-personal --region ap-northeast-2 --query "trailList[].{name:Name,multi:IsMultiRegionTrail}"`. If one exists, stop and decide before applying.
+- **Order**: merge, run the bootstrap again if `terraform-boundary` has not been updated for #98 (section 1-2, step 3), then plan and apply. The plan should add only the bucket and its settings, the trail, and the `terraform-cloudtrail` policy with its attachment, with no `-/+`.
+- **Check after apply**: `aws cloudtrail get-trail-status --name sirloinbh-audit --profile workout-personal --region ap-northeast-2 --query IsLogging` prints `true`. The first log file appears in the bucket within about 15 minutes.
+- **Read the logs**: console → CloudTrail → Event history covers the last 90 days. For older events, open the bucket (`AWSLogs/<account ID>/CloudTrail/<region>/<yyyy>/<mm>/<dd>/*.json.gz`) and download the files for the day, or list them with `aws s3 ls s3://<bucket>/AWSLogs/ --recursive`. Check integrity with `aws cloudtrail validate-logs --trail-arn <trail ARN> --start-time <UTC time>`.
+- **Remove the trail**: delete `aws_cloudtrail.audit` first. The log bucket has `prevent_destroy`, as every bucket from the module does.
