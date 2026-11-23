@@ -71,6 +71,19 @@ expect_decision() {
   esac
 }
 
+# Checks one simulated decision for what terraform-boundary lets terraform-workout do at most: an identity
+# policy that allows everything is capped by the boundary. This works before the feature's own terraform-*
+# policy exists (the real user's policies are not part of this check).
+expect_boundary_decision() {
+  local want="$1" action="$2" resource="$3" label="$4" got
+  shift 4
+  got=$(aws iam simulate-custom-policy     --policy-input-list '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"*","Resource":"*"}]}'     --permissions-boundary-policy-input-list "$BOUNDARY"     --action-names "$action" --resource-arns "$resource" "$@"     --query 'EvaluationResults[0].EvalDecision' --output text)
+  case "$want:$got" in
+    allowed:allowed | denied:explicitDeny | denied:implicitDeny) say "check: boundary $label ($got)" ;;
+    *) fail "check 'boundary $label': expected $want, got $got" ;;
+  esac
+}
+
 # Checks one simulated decision for a server user: even an inline policy that allows everything gets
 # only what the server user boundary allows.
 expect_server_user_decision() {
@@ -269,6 +282,40 @@ BOUNDARY=$(cat <<EOF
       "Resource": "arn:aws:ssm:*:${ACCOUNT}:parameter/sirloinbh/*"
     },
     { "Sid": "ParameterList", "Effect": "Allow", "Action": "ssm:DescribeParameters", "Resource": "*" },
+    {
+      "Sid": "AlertTopics",
+      "Effect": "Allow",
+      "Action": "sns:*",
+      "Resource": ["arn:aws:sns:*:${ACCOUNT}:sirloinbh-*", "arn:aws:sns:*:${ACCOUNT}:workout-memo-*"]
+    },
+    { "Sid": "AlertTopicList", "Effect": "Allow", "Action": ["sns:ListTopics", "sns:ListSubscriptions"], "Resource": "*" },
+    {
+      "Sid": "Alarms",
+      "Effect": "Allow",
+      "Action": "cloudwatch:*",
+      "Resource": ["arn:aws:cloudwatch:*:${ACCOUNT}:alarm:sirloinbh-*", "arn:aws:cloudwatch:*:${ACCOUNT}:alarm:workout-memo-*"]
+    },
+    { "Sid": "AlarmRead", "Effect": "Allow", "Action": ["cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"], "Resource": "*" },
+    {
+      "Sid": "CostAnomalies",
+      "Effect": "Allow",
+      "Action": "ce:*",
+      "Resource": ["arn:aws:ce::${ACCOUNT}:anomalymonitor/*", "arn:aws:ce::${ACCOUNT}:anomalysubscription/*"]
+    },
+    { "Sid": "CostAnomalyRead", "Effect": "Allow", "Action": ["ce:Get*", "ce:List*"], "Resource": "*" },
+    {
+      "Sid": "AuditTrail",
+      "Effect": "Allow",
+      "Action": "cloudtrail:*",
+      "Resource": ["arn:aws:cloudtrail:*:${ACCOUNT}:trail/sirloinbh-*", "arn:aws:cloudtrail:*:${ACCOUNT}:trail/workout-memo-*"]
+    },
+    { "Sid": "AuditTrailRead", "Effect": "Allow", "Action": ["cloudtrail:DescribeTrails", "cloudtrail:ListTags"], "Resource": "*" },
+    {
+      "Sid": "AccountPublicAccessBlock",
+      "Effect": "Allow",
+      "Action": ["s3:GetAccountPublicAccessBlock", "s3:PutAccountPublicAccessBlock"],
+      "Resource": "*"
+    },
     {
       "Sid": "ServerUsers",
       "Effect": "Allow",
@@ -488,5 +535,22 @@ expect_server_user_decision allowed s3:DeleteObject "arn:aws:s3:::${FILES_BUCKET
 expect_server_user_decision allowed s3:ListBucket "arn:aws:s3:::${FILES_BUCKET}" "can list the study-log files"
 expect_server_user_decision denied s3:PutBucketVersioning "arn:aws:s3:::${FILES_BUCKET}" "cannot change the study-log files bucket"
 expect_server_user_decision denied iam:CreateUser "$SERVER_USER" "cannot use IAM"
+
+# Alert and guard rail services (#98). The boundary names stay inside sirloinbh-* and workout-memo-*.
+ALERT_TOPIC="arn:aws:sns:${REGION}:${ACCOUNT}:sirloinbh-uptime-alerts"
+ALERT_ALARM="arn:aws:cloudwatch:${REGION}:${ACCOUNT}:alarm:sirloinbh-uptime-heartbeat"
+expect_boundary_decision allowed sns:CreateTopic "$ALERT_TOPIC" "can create the alert topic"
+expect_boundary_decision allowed sns:Subscribe "$ALERT_TOPIC" "can subscribe an email to the alert topic"
+expect_boundary_decision denied sns:CreateTopic "arn:aws:sns:${REGION}:${ACCOUNT}:other-topic" "cannot create a topic outside sirloinbh-*"
+expect_boundary_decision allowed cloudwatch:PutMetricAlarm "$ALERT_ALARM" "can create an alarm"
+expect_boundary_decision denied cloudwatch:PutMetricAlarm "arn:aws:cloudwatch:${REGION}:${ACCOUNT}:alarm:other-alarm" "cannot create an alarm outside sirloinbh-*"
+expect_boundary_decision allowed cloudwatch:DescribeAlarms "*" "can read alarms"
+expect_boundary_decision allowed ce:CreateAnomalyMonitor "arn:aws:ce::${ACCOUNT}:anomalymonitor/x" "can create a cost anomaly monitor"
+expect_boundary_decision allowed ce:CreateAnomalySubscription "arn:aws:ce::${ACCOUNT}:anomalysubscription/x" "can create a cost anomaly subscription"
+expect_boundary_decision allowed cloudtrail:CreateTrail "arn:aws:cloudtrail:${REGION}:${ACCOUNT}:trail/sirloinbh-audit" "can create a trail"
+expect_boundary_decision denied cloudtrail:CreateTrail "arn:aws:cloudtrail:${REGION}:${ACCOUNT}:trail/other-trail" "cannot create a trail outside sirloinbh-*"
+expect_boundary_decision allowed s3:PutAccountPublicAccessBlock "*" "can set the account public access block"
+expect_boundary_decision allowed s3:GetAccountPublicAccessBlock "*" "can read the account public access block"
+expect_boundary_decision denied sqs:CreateQueue "arn:aws:sqs:${REGION}:${ACCOUNT}:sirloinbh-x" "cannot use a service outside the list"
 
 say "bootstrap finished"
