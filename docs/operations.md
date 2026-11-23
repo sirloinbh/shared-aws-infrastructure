@@ -221,7 +221,7 @@ $p = "--profile","workout-personal"
 aws lightsail get-instances @p --query "instances[].{name:name,state:state.name,key:sshKeyName}" --output table
 aws lightsail get-static-ips @p --query "staticIps[].{name:name,attachedTo:attachedTo}" --output table
 aws lightsail get-key-pairs @p --query "keyPairs[].name" --output table
-aws lightsail get-instance-port-states @p --instance-name workout-memo-app --output table
+aws lightsail get-instance-port-states @p --instance-name sirloinbh-apps --output table
 ```
 
 ### 4-2. Whether each resource can be imported
@@ -288,11 +288,11 @@ If you can connect with an existing key, add it to `authorized_keys` from that P
    ```
 3. Edit the SSH rule again → uncheck **Allow Lightsail browser SSH** → Save. This setting does not show up in the Terraform plan, so check it yourself.
    ```powershell
-   aws lightsail get-instance-port-states --profile workout-personal --instance-name workout-memo-app --query "portStates[].{port:fromPort,aliases:join(',',cidrListAliases)}" --output table   # aliases must be empty
+   aws lightsail get-instance-port-states --profile workout-personal --instance-name sirloinbh-apps --query "portStates[].{port:fromPort,aliases:join(',',cidrListAliases)}" --output table   # aliases must be empty
    ```
 4. On the first connection, compare the server fingerprint it shows with the AWS value, then answer `yes`.
    ```powershell
-   aws lightsail get-instance-access-details --profile workout-personal --instance-name workout-memo-app --protocol ssh --query "accessDetails.hostKeys[].{alg:algorithm,sha256:fingerprintSHA256}" --output table
+   aws lightsail get-instance-access-details --profile workout-personal --instance-name sirloinbh-apps --protocol ssh --query "accessDetails.hostKeys[].{alg:algorithm,sha256:fingerprintSHA256}" --output table
    ssh -i "$HOME\.ssh\workout-memo-lightsail" ubuntu@<static_ip> "hostname; uptime"
    ```
 
@@ -315,7 +315,7 @@ The Terraform AWS provider has no resource for Lightsail metric alarms. Create t
 
 ```powershell
 aws lightsail create-contact-method --profile workout-personal --protocol Email --contact-endpoint <email>
-aws lightsail put-alarm --profile workout-personal --alarm-name workout-memo-status --monitored-resource-name workout-memo-app --metric-name StatusCheckFailed --comparison-operator GreaterThanOrEqualToThreshold --threshold 1 --evaluation-periods 2 --notification-enabled --contact-protocols Email
+aws lightsail put-alarm --profile workout-personal --alarm-name workout-memo-status --monitored-resource-name sirloinbh-apps --metric-name StatusCheckFailed --comparison-operator GreaterThanOrEqualToThreshold --threshold 1 --evaluation-periods 2 --notification-enabled --contact-protocols Email
 ```
 
 ## 9. Teardown
