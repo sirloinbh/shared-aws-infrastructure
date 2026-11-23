@@ -319,6 +319,7 @@ BOUNDARY=$(cat <<EOF
       "Action": "ce:*",
       "Resource": ["arn:aws:ce::${ACCOUNT}:anomalymonitor/*", "arn:aws:ce::${ACCOUNT}:anomalysubscription/*"]
     },
+    { "Sid": "CostAnomalyCreate", "Effect": "Allow", "Action": ["ce:CreateAnomalyMonitor", "ce:CreateAnomalySubscription"], "Resource": "*" },
     { "Sid": "CostAnomalyRead", "Effect": "Allow", "Action": ["ce:Get*", "ce:List*"], "Resource": "*" },
     {
       "Sid": "AuditTrail",
@@ -569,8 +570,9 @@ expect_boundary_decision denied sns:CreateTopic "arn:aws:sns:${REGION}:${ACCOUNT
 expect_boundary_decision allowed cloudwatch:PutMetricAlarm "$ALERT_ALARM" "can create an alarm"
 expect_boundary_decision denied cloudwatch:PutMetricAlarm "arn:aws:cloudwatch:${REGION}:${ACCOUNT}:alarm:other-alarm" "cannot create an alarm outside sirloinbh-*"
 expect_boundary_decision allowed cloudwatch:DescribeAlarms "*" "can read alarms"
-expect_boundary_decision allowed ce:CreateAnomalyMonitor "arn:aws:ce::${ACCOUNT}:anomalymonitor/x" "can create a cost anomaly monitor"
-expect_boundary_decision allowed ce:CreateAnomalySubscription "arn:aws:ce::${ACCOUNT}:anomalysubscription/x" "can create a cost anomaly subscription"
+expect_boundary_decision allowed ce:CreateAnomalyMonitor "*" "can create a cost anomaly monitor"
+expect_boundary_decision allowed ce:CreateAnomalySubscription "*" "can create a cost anomaly subscription"
+expect_boundary_decision allowed ce:DeleteAnomalyMonitor "arn:aws:ce::${ACCOUNT}:anomalymonitor/x" "can delete a cost anomaly monitor"
 expect_boundary_decision allowed cloudtrail:CreateTrail "arn:aws:cloudtrail:${REGION}:${ACCOUNT}:trail/sirloinbh-audit" "can create a trail"
 expect_boundary_decision denied cloudtrail:CreateTrail "arn:aws:cloudtrail:${REGION}:${ACCOUNT}:trail/other-trail" "cannot create a trail outside sirloinbh-*"
 expect_boundary_decision allowed s3:PutAccountPublicAccessBlock "*" "can set the account public access block"
