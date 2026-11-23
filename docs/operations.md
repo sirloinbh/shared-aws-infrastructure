@@ -311,6 +311,14 @@ The server's static IP is also stored in the SSM parameter `/sirloinbh/shared/se
 
 Add or remove entries in `allowed_cidrs` in `terraform.tfvars`, then run plan and apply. Only the firewall rules change, and the instance stays as it is. Opening to everyone (`/0`) is rejected by variable validation.
 
+### 7-1. CAA record (#103)
+
+`aws_route53_record.caa` (`dns.tf`) puts a CAA record at the zone apex: `0 issue "letsencrypt.org"` and `0 issue "amazon.com"`. Only these two authorities may issue certificates for the domain and its subdomains. Let's Encrypt is the server's certbot (wildcard certificate), and Amazon is the ACM certificate of the wiki (section 12). With no `issuewild` entry, the `issue` entries also cover the wildcard certificate.
+
+- **Plan**: adds only this record (`1 to add`). No `-/+`.
+- **Check after apply**: `nslookup -type=CAA <root_domain>` shows both entries. Then confirm the next certbot renewal (`cert.sh` dry run, project-standards `docs/server-proxy.md`) and ACM renewal still work.
+- **Another authority later**: add one more `0 issue "<ca-domain>"` string to `records` in `dns.tf` and apply, before requesting a certificate from it. If a renewal fails with a CAA error, this record is the first thing to check.
+
 ## 8. Alarms (optional)
 
 The Terraform AWS provider has no resource for Lightsail metric alarms. Create them with the CLI if you need them. Each alarm costs about $0.10 a month, and an email contact works only after you approve the AWS confirmation email.
