@@ -379,7 +379,7 @@ All apps on the server share these users, so they are named `sirloinbh-apps-*`, 
    For an app's deploy script to read this file, the sync PR from project-standards#266 must be merged into that app.
 3. Backup: run `sudo bash /opt/<app>/deploy/install-backup.sh`, then `bash /opt/<app>/deploy/backup.sh dump`, and check that "uploaded ... to s3://..." appears.
 4. App keys: create the SSM parameter from your PC with `node tools/app-secrets.mjs set <parameter>` (project-standards; without a parameter it stores the Claude key at `/sirloinbh/shared/anthropic-api-key`), then check on the server that `bash /opt/<app>/deploy/ssm-get.sh <parameter> > /dev/null && echo ok` prints `ok` (the value is not printed).
-5. To change a key, create a new key, fix `.env`, then deactivate and delete the old key. If a server key leaks, delete this user's keys and replace every app key in SSM too.
+5. To change a key, follow section 10-2. If a server key leaks, delete this user's keys and replace every app key in SSM too.
 
 ### 10-1. Server user boundary (#88)
 
@@ -389,6 +389,26 @@ All server users (five since #105) carry the permissions boundary `terraform-ser
 - **The plan** shows, for this change, four in-place updates and nothing else: `aws_iam_user.backup_uploader`, `.certbot`, `.secrets_reader`, and `.study_log_files` (adds `permissions_boundary`), `0 to add, 4 to change, 0 to destroy`. The access keys and inline policies stay as they are. If an update still fails with AccessDenied because IAM has not spread the new policy versions yet, wait a minute and apply again.
 - **After apply**, check that the server jobs still work: steps 3 and 4 above, a study-log file upload, and a certificate renewal dry run with the reverse proxy's `cert.sh` (project-standards `docs/server-proxy.md`).
 - **A new permission for a server user** needs it in both places: the inline policy in the `.tf` file and `terraform-server-user-boundary` in `scripts/bootstrap-iam.sh` (then the bootstrap again). The boundary pins the region `ap-northeast-2` and the domain `daysofme.com`; change `REGION` and `ROOT_DOMAIN` in the script if `var.region` or `var.root_domain` changes.
+
+### 10-2. Rotate the server keys (#104)
+
+The keys are long-lived and Terraform does not track them, so their age is checked by hand.
+
+- **Interval**: replace every key at least every 90 days, and at once when one may have leaked. Check the ages every 90 days (put it in your calendar).
+- **Age**: this lists each key's status and creation time for the five server users, with the personal profile. The Terraform user may call `iam:ListAccessKeys` on `sirloinbh-apps-*`:
+  ```bash
+  for u in backup-uploader certbot study-log-files uptime-alerts secrets-reader; do
+    echo "== sirloinbh-apps-$u"
+    aws iam list-access-keys --user-name "sirloinbh-apps-$u" --profile workout-personal       --query 'AccessKeyMetadata[].{Key:AccessKeyId,Status:Status,Created:CreateDate}' --output table
+  done
+  ```
+  A key past 90 days (compare `Created` with today) must be rotated. To see when a key was last used, run `aws iam get-access-key-last-used --access-key-id <key ID>`. That action is not in the Terraform user's boundary (it is read only; allowing it means a change to `scripts/bootstrap-iam.sh`), so run it with an admin identity or read "Last used" in the console (IAM → Users → the user → Security credentials). A key that was never used or not used for a long time can be deleted without a replacement, after you check which app reads it.
+- **Steps** (one user at a time; a user holds at most two keys):
+  1. Make the second key as in step 1 above, with the description "lightsail-server".
+  2. On the server, put the new values in `/opt/project-standards/.env` (or `/opt/study-log/.env` for `study-log-files`), or in SSM for the apps' own keys. Type them only on the server.
+  3. Check the apps with the commands of the table's matching step: backup (step 3), SSM read (step 4), a study-log file upload, a certificate renewal dry run with `cert.sh`, or an uptime alert test.
+  4. Deactivate the old key (console → Make inactive) and wait a day for failures.
+  5. Delete the old key. If something fails after step 4, make the old key active again, fix the cause, and repeat.
 
 ## 11. Resize the server (from a snapshot)
 
