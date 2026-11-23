@@ -107,3 +107,8 @@ variable "wiki_oidc_subject_prefix" {
     error_message = "Use the immutable form repo:<owner>@<owner ID>/<repo>@<repo ID> (gh api repos/<owner>/<repo>/actions/oidc/customization/sub)."
   }
 }
+variable "uptime_alert_emails" {
+  type        = list(string)
+  default     = []
+  description = "Recipients of the uptime alerts (#105). Empty means the same recipients as budget_emails. Keep them in terraform.tfvars (git-ignored)."
+}
