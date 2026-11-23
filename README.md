@@ -6,6 +6,7 @@ The Terraform source repo for the infrastructure of the personal AWS account. It
 - Firewall: ports 22, 80, and 443 are open only to the allowed IPs
 - Automatic snapshots: daily at 03:00 (Seoul time), AWS keeps the latest 7
 - Monthly budget alert (`monthly_budget_usd`, default $20): 50% and 80% of actual spend, 100% of forecasted spend
+- S3 public access is blocked for the whole account (`guardrails.tf`), on top of the per-bucket block in `modules/private_bucket`, so a bucket made outside the module is protected too
 
 Resources still carry the `workout-memo-*` prefix (`var.project`) because the server started as workout-memo's. That name is historical; do not rename it, because a new name replaces the Lightsail instance, static IP, and key pair.
 
