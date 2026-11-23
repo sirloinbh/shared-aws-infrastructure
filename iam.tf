@@ -17,6 +17,7 @@ locals {
   ])
   terraform_policies = setunion(local.terraform_imported_policies, [
     "terraform-uptime-alerts",
+    "terraform-guardrails",
     "terraform-cost-anomaly",
   ])
   # The boundary every role that Terraform creates must carry (#85). The bootstrap makes it, and
