@@ -5,8 +5,11 @@
       "Sid": "Route53Read",
       "Effect": "Allow",
       "Action": [
-        "route53:ListHostedZones", "route53:GetHostedZone", "route53:ListTagsForResource",
-        "route53:ListResourceRecordSets", "route53:GetChange"
+        "route53:ListHostedZones",
+        "route53:GetHostedZone",
+        "route53:ListTagsForResource",
+        "route53:ListResourceRecordSets",
+        "route53:GetChange"
       ],
       "Resource": "*"
     },
@@ -15,6 +18,25 @@
       "Effect": "Allow",
       "Action": "route53:ChangeResourceRecordSets",
       "Resource": "arn:aws:route53:::hostedzone/*"
+    },
+    {
+      "Sid": "ServerIpParameter",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:PutParameter",
+        "ssm:GetParameter",
+        "ssm:DeleteParameter",
+        "ssm:AddTagsToResource",
+        "ssm:RemoveTagsFromResource",
+        "ssm:ListTagsForResource"
+      ],
+      "Resource": "arn:aws:ssm:ap-northeast-2:*:parameter/sirloinbh/shared/server-static-ip"
+    },
+    {
+      "Sid": "ServerIpParameterRead",
+      "Effect": "Allow",
+      "Action": "ssm:DescribeParameters",
+      "Resource": "*"
     }
   ]
 }
