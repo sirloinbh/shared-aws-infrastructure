@@ -129,3 +129,12 @@ variable "kakao_origin_port" {
     error_message = "kakao_origin_port must be an unprivileged port (1025-65535)."
   }
 }
+
+variable "study_log_mail_address" {
+  type        = string
+  description = "The one address study-log sends its review reminders from and to (#120). SES mails a verification link to it. Keep it in terraform.tfvars (git-ignored)."
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.study_log_mail_address))
+    error_message = "Use one email address, for example you@example.com."
+  }
+}

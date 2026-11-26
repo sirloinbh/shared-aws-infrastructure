@@ -5,23 +5,87 @@
       "Sid": "UptimeTopic",
       "Effect": "Allow",
       "Action": [
-        "sns:CreateTopic", "sns:DeleteTopic", "sns:GetTopicAttributes", "sns:SetTopicAttributes",
-        "sns:ListTagsForResource", "sns:TagResource", "sns:UntagResource",
-        "sns:Subscribe", "sns:Unsubscribe", "sns:ListSubscriptionsByTopic",
-        "sns:GetSubscriptionAttributes", "sns:SetSubscriptionAttributes"
+        "sns:CreateTopic",
+        "sns:DeleteTopic",
+        "sns:GetTopicAttributes",
+        "sns:SetTopicAttributes",
+        "sns:ListTagsForResource",
+        "sns:TagResource",
+        "sns:UntagResource",
+        "sns:Subscribe",
+        "sns:Unsubscribe",
+        "sns:ListSubscriptionsByTopic",
+        "sns:GetSubscriptionAttributes",
+        "sns:SetSubscriptionAttributes"
       ],
       "Resource": [
         "arn:aws:sns:ap-northeast-2:*:sirloinbh-uptime-alerts",
         "arn:aws:sns:ap-northeast-2:*:sirloinbh-uptime-alerts:*"
       ]
     },
-    { "Sid": "TopicList", "Effect": "Allow", "Action": "sns:ListTopics", "Resource": "*" },
+    {
+      "Sid": "TopicList",
+      "Effect": "Allow",
+      "Action": "sns:ListTopics",
+      "Resource": "*"
+    },
     {
       "Sid": "UptimeAlarms",
       "Effect": "Allow",
-      "Action": ["cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms", "cloudwatch:ListTagsForResource", "cloudwatch:TagResource", "cloudwatch:UntagResource"],
+      "Action": [
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:ListTagsForResource",
+        "cloudwatch:TagResource",
+        "cloudwatch:UntagResource"
+      ],
       "Resource": "arn:aws:cloudwatch:ap-northeast-2:*:alarm:sirloinbh-uptime-*"
     },
-    { "Sid": "AlarmRead", "Effect": "Allow", "Action": "cloudwatch:DescribeAlarms", "Resource": "*" }
+    {
+      "Sid": "AlarmRead",
+      "Effect": "Allow",
+      "Action": "cloudwatch:DescribeAlarms",
+      "Resource": "*"
+    },
+    {
+      "Sid": "CostAnomalyManage",
+      "Effect": "Allow",
+      "Action": [
+        "ce:UpdateAnomalyMonitor",
+        "ce:DeleteAnomalyMonitor",
+        "ce:UpdateAnomalySubscription",
+        "ce:DeleteAnomalySubscription",
+        "ce:TagResource",
+        "ce:UntagResource",
+        "ce:ListTagsForResource"
+      ],
+      "Resource": [
+        "arn:aws:ce::*:anomalymonitor/*",
+        "arn:aws:ce::*:anomalysubscription/*"
+      ]
+    },
+    {
+      "Sid": "CostAnomalyCreateAndRead",
+      "Effect": "Allow",
+      "Action": [
+        "ce:CreateAnomalyMonitor",
+        "ce:CreateAnomalySubscription",
+        "ce:GetAnomalyMonitors",
+        "ce:GetAnomalySubscriptions"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "MailIdentities",
+      "Effect": "Allow",
+      "Action": [
+        "ses:CreateEmailIdentity", "ses:DeleteEmailIdentity", "ses:GetEmailIdentity",
+        "ses:PutEmailIdentityDkimAttributes", "ses:PutEmailIdentityDkimSigningAttributes",
+        "ses:PutEmailIdentityFeedbackAttributes", "ses:PutEmailIdentityMailFromAttributes",
+        "ses:PutEmailIdentityConfigurationSetAttributes",
+        "ses:ListTagsForResource", "ses:TagResource", "ses:UntagResource"
+      ],
+      "Resource": "arn:aws:ses:ap-northeast-2:*:identity/*"
+    }
   ]
 }

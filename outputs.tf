@@ -29,3 +29,8 @@ output "money_ledger_photos_bucket" { value = module.money_ledger_photos.bucket 
 output "money_ledger_photos_user" { value = aws_iam_user.money_ledger_photos.name }
 # money-ledger Kakao skill (#314): the URL to enter in Kakao i Open Builder (together with the secret header).
 output "kakao_skill_url" { value = "https://${aws_cloudfront_distribution.kakao_skill.domain_name}/kakao/skill" }
+# study-log reminder email (#120): the user whose access key goes in study-log's server .env as SES_AWS_ACCESS_KEY_ID and
+# SES_AWS_SECRET_ACCESS_KEY, the region for SES_REGION, and the identity for REMINDER_EMAIL_FROM. The key is made in the console.
+output "study_log_mail_user" { value = aws_iam_user.study_log_mail.name }
+output "study_log_mail_region" { value = var.region }
+output "study_log_mail_identity" { value = aws_sesv2_email_identity.study_log_mail.email_identity }
