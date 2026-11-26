@@ -83,6 +83,15 @@ resource "aws_lightsail_instance_public_ports" "app" {
     to_port   = 443
     cidrs     = var.allowed_cidrs
   }
+  # The Kakao skill door (money-ledger#314): CloudFront's addresses cannot be listed, so this one
+  # port is open to everyone. The shared proxy serves only POST /kakao/skill on it, and the app
+  # refuses a request without its secret header and a listed Kakao user (docs/operations.md section 15).
+  port_info {
+    protocol  = "tcp"
+    from_port = var.kakao_origin_port
+    to_port   = var.kakao_origin_port
+    cidrs     = ["0.0.0.0/0"]
+  }
 }
 
 # An alert, not a spending cap. Covers the whole (personal) account.
