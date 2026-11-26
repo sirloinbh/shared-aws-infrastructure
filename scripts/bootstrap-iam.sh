@@ -295,6 +295,9 @@ upsert_policy terraform-server-user-boundary "$SERVER_USER_BOUNDARY"
 # --- 2. The user's boundary -------------------------------------------------------------------
 # Services this repo uses. IAM is limited to the resources Terraform manages: the server users
 # (sirloinbh-apps-*), the wiki deploy role and its OIDC provider, the terraform-* policies, and itself.
+# A managed policy holds at most 6,144 characters without whitespace (#126). This one is close: measure it
+# with  printf '%s' "$BOUNDARY" | tr -d ' \n\t' | wc -c  before adding a statement, and put new
+# actions on "*" into AccountWide instead of a new statement.
 BOUNDARY=$(cat <<EOF
 {
   "Version": "2012-10-17",
@@ -317,29 +320,24 @@ BOUNDARY=$(cat <<EOF
       "Action": "ssm:*",
       "Resource": "arn:aws:ssm:*:${ACCOUNT}:parameter/sirloinbh/*"
     },
-    { "Sid": "ParameterList", "Effect": "Allow", "Action": "ssm:DescribeParameters", "Resource": "*" },
     {
       "Sid": "AlertTopics",
       "Effect": "Allow",
       "Action": "sns:*",
       "Resource": ["arn:aws:sns:*:${ACCOUNT}:sirloinbh-*", "arn:aws:sns:*:${ACCOUNT}:workout-memo-*"]
     },
-    { "Sid": "AlertTopicList", "Effect": "Allow", "Action": ["sns:ListTopics", "sns:ListSubscriptions"], "Resource": "*" },
     {
       "Sid": "Alarms",
       "Effect": "Allow",
       "Action": "cloudwatch:*",
       "Resource": ["arn:aws:cloudwatch:*:${ACCOUNT}:alarm:sirloinbh-*", "arn:aws:cloudwatch:*:${ACCOUNT}:alarm:workout-memo-*"]
     },
-    { "Sid": "AlarmRead", "Effect": "Allow", "Action": ["cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource"], "Resource": "*" },
     {
       "Sid": "CostAnomalies",
       "Effect": "Allow",
       "Action": "ce:*",
       "Resource": ["arn:aws:ce::${ACCOUNT}:anomalymonitor/*", "arn:aws:ce::${ACCOUNT}:anomalysubscription/*"]
     },
-    { "Sid": "CostAnomalyCreate", "Effect": "Allow", "Action": ["ce:CreateAnomalyMonitor", "ce:CreateAnomalySubscription"], "Resource": "*" },
-    { "Sid": "CostAnomalyRead", "Effect": "Allow", "Action": ["ce:Get*", "ce:List*"], "Resource": "*" },
     {
       "Sid": "MailIdentities",
       "Effect": "Allow",
@@ -358,11 +356,16 @@ BOUNDARY=$(cat <<EOF
       "Action": "cloudtrail:*",
       "Resource": ["arn:aws:cloudtrail:*:${ACCOUNT}:trail/sirloinbh-*", "arn:aws:cloudtrail:*:${ACCOUNT}:trail/workout-memo-*"]
     },
-    { "Sid": "AuditTrailRead", "Effect": "Allow", "Action": ["cloudtrail:DescribeTrails", "cloudtrail:ListTags"], "Resource": "*" },
     {
-      "Sid": "AccountPublicAccessBlock",
+      "Sid": "AccountWide",
       "Effect": "Allow",
-      "Action": ["s3:GetAccountPublicAccessBlock", "s3:PutAccountPublicAccessBlock"],
+      "Action": [
+        "ssm:DescribeParameters", "sns:ListTopics", "sns:ListSubscriptions",
+        "cloudwatch:DescribeAlarms", "cloudwatch:ListTagsForResource",
+        "ce:CreateAnomalyMonitor", "ce:CreateAnomalySubscription", "ce:Get*", "ce:List*",
+        "cloudtrail:DescribeTrails", "cloudtrail:ListTags",
+        "s3:GetAccountPublicAccessBlock", "s3:PutAccountPublicAccessBlock"
+      ],
       "Resource": "*"
     },
     {
