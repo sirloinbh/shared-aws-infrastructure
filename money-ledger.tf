@@ -103,7 +103,7 @@ resource "aws_cloudfront_distribution" "kakao_skill" {
     compress        = false
     # AWS managed "CachingDisabled" and "AllViewerExceptHostHeader".
     cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-    origin_request_policy_id = "b689b0a8-53d0-42c2-a5f1-4e5a4cc2ab36"
+    origin_request_policy_id = "b689b0a8-53d0-40ab-baf2-68738e2966ac"
     function_association {
       event_type   = "viewer-request"
       function_arn = aws_cloudfront_function.kakao_skill.arn
