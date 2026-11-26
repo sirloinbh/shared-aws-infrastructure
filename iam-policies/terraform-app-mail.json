@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "MailIdentities",
+      "Effect": "Allow",
+      "Action": [
+        "ses:CreateEmailIdentity", "ses:DeleteEmailIdentity", "ses:GetEmailIdentity",
+        "ses:PutEmailIdentityDkimAttributes", "ses:PutEmailIdentityDkimSigningAttributes",
+        "ses:PutEmailIdentityFeedbackAttributes", "ses:PutEmailIdentityMailFromAttributes",
+        "ses:PutEmailIdentityConfigurationSetAttributes",
+        "ses:ListTagsForResource", "ses:TagResource", "ses:UntagResource"
+      ],
+      "Resource": "arn:aws:ses:ap-northeast-2:*:identity/*"
+    }
+  ]
+}

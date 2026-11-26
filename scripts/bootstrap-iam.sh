@@ -9,7 +9,7 @@
 #      write its policy, or set its boundary only with this boundary, and never remove it (#85).
 #   1b. Policy `terraform-server-user-boundary`: the most a server user (`sirloinbh-apps-*`) can ever
 #      do (upload backups, write the certbot TXT record, read app keys, use the study-log files, send the
-#      uptime metrics and publish to the uptime topic). The
+#      uptime metrics, publish to the uptime topic and send email through SES, #120). The
 #      same rules as for roles hold for these users and their inline policies (#88).
 #   2. Policy `terraform-boundary`: the most terraform-workout can ever do. It is set as the user's
 #      permissions boundary, so every policy Terraform writes for itself is capped by it.
@@ -255,6 +255,12 @@ SERVER_USER_BOUNDARY=$(cat <<EOF
       "Resource": "arn:aws:s3:::${FILES_BUCKET}"
     },
     {
+      "Sid": "StudyLogMail",
+      "Effect": "Allow",
+      "Action": "ses:SendEmail",
+      "Resource": "arn:aws:ses:${REGION}:${ACCOUNT}:identity/*"
+    },
+    {
       "Sid": "UptimeMetrics",
       "Effect": "Allow",
       "Action": "cloudwatch:PutMetricData",
@@ -321,6 +327,18 @@ BOUNDARY=$(cat <<EOF
     },
     { "Sid": "CostAnomalyCreate", "Effect": "Allow", "Action": ["ce:CreateAnomalyMonitor", "ce:CreateAnomalySubscription"], "Resource": "*" },
     { "Sid": "CostAnomalyRead", "Effect": "Allow", "Action": ["ce:Get*", "ce:List*"], "Resource": "*" },
+    {
+      "Sid": "MailIdentities",
+      "Effect": "Allow",
+      "Action": [
+        "ses:CreateEmailIdentity", "ses:DeleteEmailIdentity", "ses:GetEmailIdentity",
+        "ses:PutEmailIdentityDkimAttributes", "ses:PutEmailIdentityDkimSigningAttributes",
+        "ses:PutEmailIdentityFeedbackAttributes", "ses:PutEmailIdentityMailFromAttributes",
+        "ses:PutEmailIdentityConfigurationSetAttributes",
+        "ses:ListTagsForResource", "ses:TagResource", "ses:UntagResource"
+      ],
+      "Resource": "arn:aws:ses:*:${ACCOUNT}:identity/*"
+    },
     {
       "Sid": "AuditTrail",
       "Effect": "Allow",
@@ -552,6 +570,11 @@ expect_server_user_decision denied kms:Decrypt "$KMS_KEY" "cannot decrypt outsid
 expect_server_user_decision allowed s3:DeleteObject "arn:aws:s3:::${FILES_BUCKET}/x" "can delete a study-log file"
 expect_server_user_decision allowed s3:ListBucket "arn:aws:s3:::${FILES_BUCKET}" "can list the study-log files"
 expect_server_user_decision denied s3:PutBucketVersioning "arn:aws:s3:::${FILES_BUCKET}" "cannot change the study-log files bucket"
+MAIL_IDENTITY="arn:aws:ses:${REGION}:${ACCOUNT}:identity/reminder@example.com"
+expect_server_user_decision allowed ses:SendEmail "$MAIL_IDENTITY" "can send email from an identity"
+expect_server_user_decision denied ses:SendRawEmail "$MAIL_IDENTITY" "cannot send raw email"
+expect_server_user_decision denied ses:CreateEmailIdentity "$MAIL_IDENTITY" "cannot create an email identity"
+expect_server_user_decision denied ses:SendEmail "arn:aws:ses:us-east-1:${ACCOUNT}:identity/reminder@example.com" "cannot send through another region"
 expect_server_user_decision denied iam:CreateUser "$SERVER_USER" "cannot use IAM"
 NAMESPACE_KEY="ContextKeyName=cloudwatch:namespace,ContextKeyType=string"
 expect_server_user_decision allowed cloudwatch:PutMetricData "*" "can put uptime metrics"   --context-entries "${NAMESPACE_KEY},ContextKeyValues=${UPTIME_NAMESPACE}"
@@ -575,6 +598,9 @@ expect_boundary_decision allowed ce:CreateAnomalySubscription "*" "can create a 
 expect_boundary_decision allowed ce:DeleteAnomalyMonitor "arn:aws:ce::${ACCOUNT}:anomalymonitor/x" "can delete a cost anomaly monitor"
 expect_boundary_decision allowed cloudtrail:CreateTrail "arn:aws:cloudtrail:${REGION}:${ACCOUNT}:trail/sirloinbh-audit" "can create a trail"
 expect_boundary_decision denied cloudtrail:CreateTrail "arn:aws:cloudtrail:${REGION}:${ACCOUNT}:trail/other-trail" "cannot create a trail outside sirloinbh-*"
+expect_boundary_decision allowed ses:CreateEmailIdentity "$MAIL_IDENTITY" "can create an email identity"
+expect_boundary_decision allowed ses:GetEmailIdentity "$MAIL_IDENTITY" "can read an email identity"
+expect_boundary_decision denied ses:SendEmail "$MAIL_IDENTITY" "cannot send email itself"
 expect_boundary_decision allowed s3:PutAccountPublicAccessBlock "*" "can set the account public access block"
 expect_boundary_decision allowed s3:GetAccountPublicAccessBlock "*" "can read the account public access block"
 expect_boundary_decision denied sqs:CreateQueue "arn:aws:sqs:${REGION}:${ACCOUNT}:sirloinbh-x" "cannot use a service outside the list"

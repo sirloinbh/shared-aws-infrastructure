@@ -20,6 +20,7 @@ locals {
     "terraform-guardrails",
     "terraform-cost-anomaly",
     "terraform-cloudtrail",
+    "terraform-app-mail",
   ])
   # The boundary every role that Terraform creates must carry (#85). The bootstrap makes it, and
   # terraform-boundary refuses to create a role, or write its policy, without it.
