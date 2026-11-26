@@ -10,7 +10,7 @@ locals {
   # share one document by area instead of one policy per service. Before adding a name, see whether the
   # new statements fit an existing document (6,144 characters without whitespace). The kept names are
   # historical: route53-dns also holds the server IP parameter (#69), state also the study-log files
-  # bucket (#53), uptime-alerts also cost anomaly (#100), guardrails also CloudTrail (#102).
+  # bucket (#53), uptime-alerts also cost anomaly (#100) and SES identities (#120, #123), guardrails also CloudTrail (#102).
   # Three of them were made by hand before #79 and are adopted by the import blocks below; a policy added
   # after that is created by Terraform, so it must not be imported (the import would fail on a policy that
   # does not exist).

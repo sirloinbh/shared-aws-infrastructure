@@ -3,11 +3,11 @@
 # an email address: AWS mails a verification link to it once, and it stays pending until clicked
 # (docs/operations.md section 10). A new SES account is in the sandbox, which also limits recipients
 # to verified addresses, so the reminder goes to the same address it is sent from.
-# The identity waits for terraform-app-mail to be attached to the Terraform user.
+# The identity waits for the SES statement in terraform-uptime-alerts (#123; it was terraform-app-mail until #116).
 resource "aws_sesv2_email_identity" "study_log_mail" {
   email_identity = var.study_log_mail_address
   tags           = local.tags
-  depends_on     = [terraform_data.account_guard, aws_iam_user_policy_attachment.terraform["terraform-app-mail"]]
+  depends_on     = [terraform_data.account_guard, aws_iam_policy.terraform["terraform-uptime-alerts"]]
 }
 
 # The server's mail identity: it can send from this one address and do nothing else in SES (no
