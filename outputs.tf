@@ -24,3 +24,8 @@ output "wiki_deploy_role_arn" { value = aws_iam_role.wiki_deploy.arn }
 output "uptime_alert_user" { value = aws_iam_user.uptime_alerts.name }
 output "uptime_alert_topic_arn" { value = aws_sns_topic.uptime.arn }
 output "uptime_alert_namespace" { value = local.uptime_namespace }
+# study-log reminder email (#120): the user whose access key goes in study-log's server .env as SES_AWS_ACCESS_KEY_ID and
+# SES_AWS_SECRET_ACCESS_KEY, the region for SES_REGION, and the identity for REMINDER_EMAIL_FROM. The key is made in the console.
+output "study_log_mail_user" { value = aws_iam_user.study_log_mail.name }
+output "study_log_mail_region" { value = var.region }
+output "study_log_mail_identity" { value = aws_sesv2_email_identity.study_log_mail.email_identity }

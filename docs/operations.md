@@ -368,6 +368,7 @@ All apps on the server share these users, so they are named `sirloinbh-apps-*`, 
 | `sirloinbh-apps-backup-uploader` | Only upload files to the backup bucket (no read, list, or delete) | `BACKUP_S3_BUCKET` (= the `backup_bucket` output value), `BACKUP_AWS_ACCESS_KEY_ID`, `BACKUP_AWS_SECRET_ACCESS_KEY` |
 | `sirloinbh-apps-certbot` | Only write the `_acme-challenge.<root_domain>` TXT record in the domain's hosted zone (#33, project-standards ADR-0012). It cannot change any other record | `CERTBOT_AWS_ACCESS_KEY_ID`, `CERTBOT_AWS_SECRET_ACCESS_KEY` (read by `cert.sh` of the server reverse proxy, project-standards `docs/server-proxy.md`) |
 | `sirloinbh-apps-study-log-files` (#53) | Only get, put and delete objects in the study-log files bucket, and list its keys so a missing file reads as not found. It cannot change the bucket or remove earlier versions | Not in the shared file: only study-log uses it. Put `FILE_BUCKET` (= the `study_log_files_bucket` output value), `AWS_REGION=ap-northeast-2`, `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in study-log's server `.env` (`/opt/study-log/.env`), which its compose file passes to the API |
+| `sirloinbh-apps-study-log-mail` (#120) | Only `ses:SendEmail`, from the one verified address `study_log_mail_address` (`ses:FromAddress` is pinned to it). It cannot send raw email, change identities or send from another address | Not in the shared file: only study-log uses it. Put `SES_AWS_ACCESS_KEY_ID` and `SES_AWS_SECRET_ACCESS_KEY` (this user's key), `SES_REGION` (= the `study_log_mail_region` output value), `REMINDER_EMAIL_FROM` (= the `study_log_mail_identity` output value) and `REMINDER_EMAIL_TO` (the same address, see below) in `/opt/study-log/.env`. `AWS_ACCESS_KEY_ID` there stays the files user's key |
 | `sirloinbh-apps-uptime-alerts` (#105) | Only put CloudWatch metrics in the `ProjectStandards/Uptime` namespace and publish to the `sirloinbh-uptime-alerts` topic. It cannot read metrics, change alarms or subscribe | `AWS_ALERT_ACCESS_KEY_ID`, `AWS_ALERT_SECRET_ACCESS_KEY`, plus `AWS_ALERT_TOPIC_ARN` (= the `uptime_alert_topic_arn` output), `AWS_ALERT_REGION` and `AWS_ALERT_NAMESPACE` (read by `signals.sh` of the server proxy, project-standards `docs/server-proxy.md`, "AWS alert path") |
 | `sirloinbh-apps-secrets-reader` | Only read (`ssm:GetParameter`) SSM parameters under `/sirloinbh/shared/` and `/sirloinbh/<app>/` for the apps in `local.registry.secretApps` (the generated `apps.json`, read in `registry.tf`; project-standards ADR-0014) | `SECRETS_AWS_ACCESS_KEY_ID`, `SECRETS_AWS_SECRET_ACCESS_KEY` (read by every app whose `.env.example` tags a key with `@ssm=`, and by apps that use the Claude API) |
 
@@ -382,13 +383,25 @@ All apps on the server share these users, so they are named `sirloinbh-apps-*`, 
 4. App keys: create the SSM parameter from your PC with `node tools/app-secrets.mjs set <parameter>` (project-standards; without a parameter it stores the Claude key at `/sirloinbh/shared/anthropic-api-key`), then check on the server that `bash /opt/<app>/deploy/ssm-get.sh <parameter> > /dev/null && echo ok` prints `ok` (the value is not printed).
 5. To change a key, follow section 10-2. If a server key leaks, delete this user's keys and replace every app key in SSM too.
 
+### 10-0. Email for study-log (#120)
+
+study-log sends one review reminder a day through AWS SES (sirloinbh/study-log#365). Terraform (`mail.tf`) creates the SES email identity for `study_log_mail_address` (set in the git-ignored `terraform.tfvars`) and the user `sirloinbh-apps-study-log-mail`.
+
+1. **Bootstrap first**: merge the PR, then run the bootstrap again (section 1-2, step 3) so both boundaries allow SES, then plan and apply. Before that the apply fails with AccessDenied. The new policy `terraform-app-mail` is one more managed policy on the Terraform user; IAM allows 10 per user by default, so the quota must already be raised (#116), or the attachment fails with `LimitExceeded`.
+2. **Verify the identity**: after apply, SES mails a verification link to the address. Open it once; the identity stays `Pending` until then (`aws sesv2 get-email-identity --email-identity <address> --region ap-northeast-2 --query VerifiedForSendingStatus`, with the personal profile, prints `true` when done).
+3. **Sandbox**: a new SES account can send only to verified addresses and at most 200 a day. The reminder goes to the same verified address it is sent from, so the sandbox is enough. Asking AWS for production access is not needed for one mail a day.
+4. **Key and server**: make the access key as in step 1 above, put the five values from the table in `/opt/study-log/.env` and recreate the API container with study-log's deploy. Type the values only on the server.
+5. **Check**: the study-log API logs `reminder_sent` the first morning after 08:00 Asia/Seoul with a review due, and the mail arrives (check the spam folder once).
+6. **Stop**: empty `REMINDER_EMAIL_TO` or `REMINDER_EMAIL_FROM` in study-log's `.env` and recreate the container; the job stays off.
+
 ### 10-1. Server user boundary (#88)
 
-All server users (five since #105) carry the permissions boundary `terraform-server-user-boundary` (`permissions_boundary` on each `aws_iam_user`), which the bootstrap makes (section 1-2, step 3). The server keys are long-lived, so whatever inline policy Terraform writes, a key can do no more than the table above. The Terraform user cannot create a `sirloinbh-apps-*` user or write its inline policy without that boundary, and cannot remove it.
+All server users (six since #120) carry the permissions boundary `terraform-server-user-boundary` (`permissions_boundary` on each `aws_iam_user`), which the bootstrap makes (section 1-2, step 3). The server keys are long-lived, so whatever inline policy Terraform writes, a key can do no more than the table above. The Terraform user cannot create a `sirloinbh-apps-*` user or write its inline policy without that boundary, and cannot remove it.
 
 - **Order**: merge the PR, run the bootstrap again (section 1-2, step 3) so `terraform-server-user-boundary` exists and `terraform-boundary` and `terraform-iam-self` have the new rules, then plan and apply. Before the bootstrap, the apply fails with AccessDenied.
 - **The plan** shows, for this change, four in-place updates and nothing else: `aws_iam_user.backup_uploader`, `.certbot`, `.secrets_reader`, and `.study_log_files` (adds `permissions_boundary`), `0 to add, 4 to change, 0 to destroy`. The access keys and inline policies stay as they are. If an update still fails with AccessDenied because IAM has not spread the new policy versions yet, wait a minute and apply again.
 - **After apply**, check that the server jobs still work: steps 3 and 4 above, a study-log file upload, and a certificate renewal dry run with the reverse proxy's `cert.sh` (project-standards `docs/server-proxy.md`).
+- **Email (#120)**: `terraform-server-user-boundary` allows `ses:SendEmail` on identities in `ap-northeast-2` (the script cannot know the address), and the inline policy in `mail.tf` narrows it to the one identity and its `From` address. `terraform-boundary` lets the Terraform user manage SES identities (not send).
 - **A new permission for a server user** needs it in both places: the inline policy in the `.tf` file and `terraform-server-user-boundary` in `scripts/bootstrap-iam.sh` (then the bootstrap again). The boundary pins the region `ap-northeast-2` and the domain `daysofme.com`; change `REGION` and `ROOT_DOMAIN` in the script if `var.region` or `var.root_domain` changes.
 
 ### 10-2. Rotate the server keys (#104)
@@ -396,9 +409,9 @@ All server users (five since #105) carry the permissions boundary `terraform-ser
 The keys are long-lived and Terraform does not track them, so their age is checked by hand.
 
 - **Interval**: replace every key at least every 90 days, and at once when one may have leaked. Check the ages every 90 days (put it in your calendar).
-- **Age**: this lists each key's status and creation time for the five server users, with the personal profile. The Terraform user may call `iam:ListAccessKeys` on `sirloinbh-apps-*`:
+- **Age**: this lists each key's status and creation time for the six server users, with the personal profile. The Terraform user may call `iam:ListAccessKeys` on `sirloinbh-apps-*`:
   ```bash
-  for u in backup-uploader certbot study-log-files uptime-alerts secrets-reader; do
+  for u in backup-uploader certbot study-log-files study-log-mail uptime-alerts secrets-reader; do
     echo "== sirloinbh-apps-$u"
     aws iam list-access-keys --user-name "sirloinbh-apps-$u" --profile workout-personal       --query 'AccessKeyMetadata[].{Key:AccessKeyId,Status:Status,Created:CreateDate}' --output table
   done
@@ -406,7 +419,7 @@ The keys are long-lived and Terraform does not track them, so their age is check
   A key past 90 days (compare `Created` with today) must be rotated. To see when a key was last used, run `aws iam get-access-key-last-used --access-key-id <key ID>`. That action is not in the Terraform user's boundary (it is read only; allowing it means a change to `scripts/bootstrap-iam.sh`), so run it with an admin identity or read "Last used" in the console (IAM → Users → the user → Security credentials). A key that was never used or not used for a long time can be deleted without a replacement, after you check which app reads it.
 - **Steps** (one user at a time; a user holds at most two keys):
   1. Make the second key as in step 1 above, with the description "lightsail-server".
-  2. On the server, put the new values in `/opt/project-standards/.env` (or `/opt/study-log/.env` for `study-log-files`), or in SSM for the apps' own keys. Type them only on the server.
+  2. On the server, put the new values in `/opt/project-standards/.env` (or `/opt/study-log/.env` for `study-log-files` and `study-log-mail`), or in SSM for the apps' own keys. Type them only on the server.
   3. Check the apps with the commands of the table's matching step: backup (step 3), SSM read (step 4), a study-log file upload, a certificate renewal dry run with `cert.sh`, or an uptime alert test.
   4. Deactivate the old key (console → Make inactive) and wait a day for failures.
   5. Delete the old key. If something fails after step 4, make the old key active again, fix the cause, and repeat.
