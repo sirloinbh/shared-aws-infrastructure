@@ -117,3 +117,15 @@ variable "cost_anomaly_threshold_usd" {
   default     = 5
   description = "Cost anomaly alert (#100): email when one service's unexpected spend (total impact) is at least this many USD."
 }
+
+# The TCP port on the server where the shared proxy answers only the Kakao skill (money-ledger#314).
+# CloudFront reaches the server here from addresses that cannot be listed, so this one port is open
+# to everyone while 22, 80 and 443 stay on allowed_cidrs. The proxy must serve only POST /kakao/skill on it.
+variable "kakao_origin_port" {
+  type    = number
+  default = 8443
+  validation {
+    condition     = var.kakao_origin_port > 1024 && var.kakao_origin_port < 65536
+    error_message = "kakao_origin_port must be an unprivileged port (1025-65535)."
+  }
+}

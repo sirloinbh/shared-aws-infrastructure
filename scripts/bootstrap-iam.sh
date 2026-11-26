@@ -194,6 +194,7 @@ esac
 say "hosted zone of ${ROOT_DOMAIN} found"
 BACKUP_BUCKET="sirloinbh-db-backups-${ACCOUNT}"
 FILES_BUCKET="sirloinbh-study-log-files-${ACCOUNT}"
+PHOTOS_BUCKET="sirloinbh-money-ledger-photos-${ACCOUNT}"
 SERVER_USER_BOUNDARY=$(cat <<EOF
 {
   "Version": "2012-10-17",
@@ -253,6 +254,18 @@ SERVER_USER_BOUNDARY=$(cat <<EOF
       "Effect": "Allow",
       "Action": "s3:ListBucket",
       "Resource": "arn:aws:s3:::${FILES_BUCKET}"
+    },
+    {
+      "Sid": "MoneyLedgerPhotos",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+      "Resource": "arn:aws:s3:::${PHOTOS_BUCKET}/*"
+    },
+    {
+      "Sid": "MoneyLedgerPhotosList",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::${PHOTOS_BUCKET}"
     },
     {
       "Sid": "UptimeMetrics",
@@ -552,6 +565,9 @@ expect_server_user_decision denied kms:Decrypt "$KMS_KEY" "cannot decrypt outsid
 expect_server_user_decision allowed s3:DeleteObject "arn:aws:s3:::${FILES_BUCKET}/x" "can delete a study-log file"
 expect_server_user_decision allowed s3:ListBucket "arn:aws:s3:::${FILES_BUCKET}" "can list the study-log files"
 expect_server_user_decision denied s3:PutBucketVersioning "arn:aws:s3:::${FILES_BUCKET}" "cannot change the study-log files bucket"
+expect_server_user_decision allowed s3:PutObject "arn:aws:s3:::${PHOTOS_BUCKET}/x" "can put a money-ledger photo"
+expect_server_user_decision allowed s3:ListBucket "arn:aws:s3:::${PHOTOS_BUCKET}" "can list the money-ledger photos"
+expect_server_user_decision denied s3:PutBucketVersioning "arn:aws:s3:::${PHOTOS_BUCKET}" "cannot change the money-ledger photos bucket"
 expect_server_user_decision denied iam:CreateUser "$SERVER_USER" "cannot use IAM"
 NAMESPACE_KEY="ContextKeyName=cloudwatch:namespace,ContextKeyType=string"
 expect_server_user_decision allowed cloudwatch:PutMetricData "*" "can put uptime metrics"   --context-entries "${NAMESPACE_KEY},ContextKeyValues=${UPTIME_NAMESPACE}"

@@ -5,7 +5,8 @@
       "Sid": "AppFileBuckets",
       "Effect": "Allow",
       "Action": "s3:*",
-      "Resource": ["arn:aws:s3:::sirloinbh-study-log-files-*", "arn:aws:s3:::sirloinbh-study-log-files-*/*"]
+      "Resource": ["arn:aws:s3:::sirloinbh-study-log-files-*", "arn:aws:s3:::sirloinbh-study-log-files-*/*",
+        "arn:aws:s3:::sirloinbh-money-ledger-photos-*", "arn:aws:s3:::sirloinbh-money-ledger-photos-*/*"]
     }
   ]
 }
