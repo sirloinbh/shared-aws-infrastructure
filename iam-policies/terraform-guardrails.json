@@ -4,8 +4,35 @@
     {
       "Sid": "AccountPublicAccessBlock",
       "Effect": "Allow",
-      "Action": ["s3:GetAccountPublicAccessBlock", "s3:PutAccountPublicAccessBlock"],
+      "Action": [
+        "s3:GetAccountPublicAccessBlock",
+        "s3:PutAccountPublicAccessBlock"
+      ],
       "Resource": "*"
+    },
+    {
+      "Sid": "AuditTrail",
+      "Effect": "Allow",
+      "Action": "cloudtrail:*",
+      "Resource": "arn:aws:cloudtrail:*:*:trail/sirloinbh-audit"
+    },
+    {
+      "Sid": "AuditTrailRead",
+      "Effect": "Allow",
+      "Action": [
+        "cloudtrail:DescribeTrails",
+        "cloudtrail:ListTags"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "TrailLogBucket",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::sirloinbh-cloudtrail-logs-*",
+        "arn:aws:s3:::sirloinbh-cloudtrail-logs-*/*"
+      ]
     }
   ]
 }

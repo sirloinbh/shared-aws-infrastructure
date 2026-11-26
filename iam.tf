@@ -6,21 +6,22 @@
 locals {
   terraform_user = "terraform-workout"
   # Each name has a policy document iam-policies/<name>.json. A new policy is a new file plus a name here.
-  # The five made by hand before #79 are adopted by the import blocks below; a policy added after that is
-  # created by Terraform, so it must not be imported (the import would fail on a policy that does not exist).
+  # An IAM user holds at most 10 managed policies (20 after a quota increase), so since #116 small policies
+  # share one document by area instead of one policy per service. Before adding a name, see whether the
+  # new statements fit an existing document (6,144 characters without whitespace). The kept names are
+  # historical: route53-dns also holds the server IP parameter (#69), state also the study-log files
+  # bucket (#53), uptime-alerts also cost anomaly (#100), guardrails also CloudTrail (#102).
+  # Three of them were made by hand before #79 and are adopted by the import blocks below; a policy added
+  # after that is created by Terraform, so it must not be imported (the import would fail on a policy that
+  # does not exist).
   terraform_imported_policies = toset([
-    "terraform-app-files",
     "terraform-route53-dns",
-    "terraform-server-ip",
     "terraform-state",
     "terraform-wiki-site",
   ])
   terraform_policies = setunion(local.terraform_imported_policies, [
     "terraform-uptime-alerts",
     "terraform-guardrails",
-    "terraform-cost-anomaly",
-    "terraform-cloudtrail",
-    "terraform-app-mail",
   ])
   # The boundary every role that Terraform creates must carry (#85). The bootstrap makes it, and
   # terraform-boundary refuses to create a role, or write its policy, without it.
