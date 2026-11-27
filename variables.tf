@@ -32,7 +32,7 @@ variable "instance_name" {
 }
 variable "allowed_cidrs" {
   type        = list(string)
-  description = "IPv4 CIDRs allowed to reach SSH (22) and the web (80, 443). Add new networks here."
+  description = "IPv4 CIDRs allowed to reach SSH (22) and HTTP (80). 443 is open to everyone (#132). Add new networks here."
   validation {
     condition = length(var.allowed_cidrs) > 0 && alltrue([
       for c in var.allowed_cidrs : can(cidrhost(c, 0)) && !endswith(c, "/0")
@@ -120,7 +120,7 @@ variable "cost_anomaly_threshold_usd" {
 
 # The TCP port on the server where the shared proxy answers only the Kakao skill (money-ledger#314).
 # CloudFront reaches the server here from addresses that cannot be listed, so this one port is open
-# to everyone while 22, 80 and 443 stay on allowed_cidrs. The proxy must serve only POST /kakao/skill on it.
+# to everyone while 22 and 80 stay on allowed_cidrs (443 is public since #132). The proxy must serve only POST /kakao/skill on it.
 variable "kakao_origin_port" {
   type    = number
   default = 8443
