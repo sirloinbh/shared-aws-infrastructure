@@ -3,7 +3,7 @@
 The Terraform source repo for the infrastructure of the personal AWS account. It manages one production server that all the apps share: a 2 GB Lightsail `small_3_0` in the Seoul region (`bundle_id` and `instance_name` are set in `terraform.tfvars` since the 2026-11-15 resize, [operations doc](docs/operations.md) section 11). A reverse proxy on the server serves each app at `https://<app>.daysofme.com` (the app list is in `apps.json`). The server is set up as follows.
 
 - Static IP, with one Route 53 A record per app and shared service
-- Firewall: ports 22, 80, and 443 are open only to the allowed IPs
+- Firewall: ports 22 and 80 are open only to the allowed IPs; 443 is open to everyone and the apps check the shared sign-in (#132)
 - Automatic snapshots: daily at 03:00 (Seoul time), AWS keeps the latest 7
 - Monthly budget alert (`monthly_budget_usd`, default $20): 50% and 80% of actual spend, 100% of forecasted spend
 - S3 public access is blocked for the whole account (`guardrails.tf`), on top of the per-bucket block in `modules/private_bucket`, so a bucket made outside the module is protected too

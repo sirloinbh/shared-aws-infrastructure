@@ -1,5 +1,5 @@
 # Workout Memo first deployment (#73): one Lightsail instance running Docker Compose
-# (web, API, PostgreSQL), reachable only from allowed IPs, with daily snapshots and a
+# (web, API, PostgreSQL), HTTPS behind the shared sign-in (#132), with daily snapshots and a
 # monthly cost alert. Runbook: docs/deployment.md.
 locals {
   tags = { Project = var.project }
@@ -58,9 +58,11 @@ resource "aws_lightsail_static_ip_attachment" "app" {
   instance_name  = aws_lightsail_instance.app.name
 }
 
-# Replaces the default firewall: only SSH, HTTP, and HTTPS, only from the allow list.
-# 443 is the app subdomains through the server nginx (#33). The certificate uses DNS validation,
-# so 80 never has to be open to everyone.
+# Replaces the default firewall: SSH and HTTP only from the allow list, HTTPS from everyone.
+# 443 is the app subdomains through the server nginx (#33). It is open to everyone (#132, user
+# decision 2026-11-28): every app on the proxy checks the shared sign-in before its /api routes,
+# and the Android app and Google's Digital Asset Links check must reach it from any network.
+# The certificate uses DNS validation and 80 only redirects, so 80 stays on the allow list.
 # Browser SSH in the Lightsail console adds cidr_list_aliases to 22, and the next plan replaces
 # this resource; remove them as in docs/operations.md section 6 (#43).
 resource "aws_lightsail_instance_public_ports" "app" {
@@ -81,7 +83,7 @@ resource "aws_lightsail_instance_public_ports" "app" {
     protocol  = "tcp"
     from_port = 443
     to_port   = 443
-    cidrs     = var.allowed_cidrs
+    cidrs     = ["0.0.0.0/0"]
   }
   # The Kakao skill door (money-ledger#314): CloudFront's addresses cannot be listed, so this one
   # port is open to everyone. The shared proxy serves only POST /kakao/skill on it, and the app

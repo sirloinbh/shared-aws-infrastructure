@@ -2,7 +2,7 @@
 #
 # 1. The receipt photo bucket (#300): private, one server key, like the study-log files (files.tf).
 # 2. The public door for the Kakao i Open Builder skill webhook (#314). Kakao's servers must reach
-#    the skill over public HTTPS, but the server's firewall only lets allowed IPs in (main.tf) and
+#    the skill over public HTTPS, but the server's firewall then let only allowed IPs in (main.tf, before #132) and
 #    everything else in money-ledger is private. So the only public thing is a CloudFront
 #    distribution whose viewer-request function lets exactly `POST /kakao/skill` through and answers
 #    every other method and path with 404 at the edge, before any request reaches the server. The
